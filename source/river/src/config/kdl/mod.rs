@@ -3,29 +3,27 @@ use std::{
 };
 
 use crate::{
-    config::internal::{
+    config::{internal::{
         Config, DiscoveryKind, FileServerConfig, HealthCheckKind, ListenerConfig, ListenerKind,
         PathControl, ProxyConfig, SelectionKind, TlsConfig, UpstreamOptions,
-    },
+    }, kdl::parser::ConfigParser},
     proxy::{
         rate_limiting::{
-            multi::{MultiRaterConfig, MultiRequestKeyKind},
-            single::{SingleInstanceConfig, SingleRequestKeyKind},
-            AllRateConfig, RegexShim,
+            AllRateConfig, RegexShim, multi::{MultiRaterConfig, MultiRequestKeyKind}, single::{SingleInstanceConfig, SingleRequestKeyKind}
         },
         request_selector::{
-            null_selector, source_addr_and_uri_path_selector, uri_path_selector, RequestSelector,
+            RequestSelector, null_selector, source_addr_and_uri_path_selector, uri_path_selector
         },
     },
 };
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 use miette::{bail, Diagnostic, SourceSpan};
 use pingora::{protocols::ALPN, upstreams::peer::HttpPeer};
-use tracing_subscriber::fmt::format;
 
 use super::internal::RateLimitingConfig;
 
 mod utils;
+mod parser;
 
 /// This is the primary interface for parsing the document.
 impl TryFrom<&KdlDocument> for Config {
@@ -246,26 +244,7 @@ fn extract_service(
 
     // Connectors
     //
-    let conn_node = utils::required_child_doc(doc, node, "connectors")?;
-    let conns = utils::data_nodes(doc, conn_node)?;
-    let mut conn_cfgs = vec![];
-    let mut load_balance: Option<UpstreamOptions> = None;
-    for (node, name, args) in conns {
-        if name == "load-balance" {
-            if load_balance.is_some() {
-                return Err(Bad::docspan("Duplicate 'load-balance' section", doc, &node.span()).into());
-            }
-            load_balance = Some(extract_load_balance(doc, node)?);
-            continue;
-        }
-        let conn = extract_connector(doc, node, name, args)?;
-        conn_cfgs.push(conn);
-    }
-    if conn_cfgs.is_empty() {
-        return Err(
-            Bad::docspan("We require at least one connector", doc, &conn_node.span()).into(),
-        );
-    }
+    let (conn_cfgs, load_balance) = ConfigParser::process_connectors_node(doc, node)?;
 
     // Path Control (optional)
     let pc = extract_path_control(doc, node)?;
@@ -733,7 +712,7 @@ fn extract_threads_per_service(doc: &KdlDocument, sys: &KdlDocument) -> miette::
 }
 
 #[derive(thiserror::Error, Debug, Diagnostic)]
-#[error("{error}")]
+#[error("Incorrect configuration contents")]
 struct Bad {
     #[help]
     error: String,
@@ -793,7 +772,7 @@ mod tests {
     pub type Result<T> = miette::Result<T>;
     use crate::{
         config::internal::{
-            Config, FileServerConfig, ListenerConfig, ListenerKind, ProxyConfig, UpstreamOptions
+            Config, FileServerConfig, ListenerConfig, ListenerKind, ProxyConfig, Upstream, UpstreamOptions
         },
         proxy::{
             rate_limiting::{AllRateConfig, RegexShim, multi::MultiRaterConfig},
@@ -844,11 +823,11 @@ mod tests {
                             },
                         },
                     ],
-                    upstreams: vec![HttpPeer::new(
+                    upstreams: vec![Upstream::Service(HttpPeer::new(
                         "91.107.223.4:443",
                         true,
                         String::from("onevariable.com"),
-                    )],
+                    ))],
                     path_control: crate::config::internal::PathControl {
                         upstream_request_filters: vec![
                             BTreeMap::from([
@@ -932,7 +911,7 @@ mod tests {
                             offer_h2: false,
                         },
                     }],
-                    upstreams: vec![HttpPeer::new("91.107.223.4:80", false, String::new())],
+                    upstreams: vec![Upstream::Service(HttpPeer::new("91.107.223.4:80", false, String::new()))],
                     path_control: crate::config::internal::PathControl {
                         upstream_request_filters: vec![],
                         upstream_response_filters: vec![],
@@ -992,6 +971,14 @@ mod tests {
                 .iter()
                 .zip(ebp.upstreams.iter())
                 .for_each(|(a, e)| {
+                    let a = match a {
+                        Upstream::Service(s) => s,
+                        _ => unreachable!()
+                    };
+                    let e = match e {
+                        Upstream::Service(s) => s,
+                        _ => unreachable!()
+                    };
                     assert_eq!(a._address, e._address);
                     assert_eq!(a.scheme, e.scheme);
                     assert_eq!(a.sni, e.sni);
@@ -1101,6 +1088,8 @@ mod tests {
 
         let msg = val
             .unwrap_err()
+            .help()
+            .unwrap()
             .to_string();
 
         assert!(msg.contains("Duplicate 'load-balance' section"));
@@ -1242,8 +1231,14 @@ mod tests {
                 offer_h2: false,
             }
         );
+        let upstream = &val.basic_proxies[0].upstreams[0];
+        let upstream  = match upstream {
+            Upstream::Service(s) => s,
+            _ => unreachable!()
+        };
+
         assert_eq!(
-            val.basic_proxies[0].upstreams[0]._address,
+            upstream._address,
             ("127.0.0.1:8000".parse::<SocketAddr>().unwrap()).into()
         );
     }

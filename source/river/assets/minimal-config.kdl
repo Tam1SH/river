@@ -1,0 +1,10 @@
+services {
+    Example {
+        listeners {
+            "0.0.0.0:8080"
+        }
+        connectors {
+            return code="200" response="OK"
+        }
+    }
+}

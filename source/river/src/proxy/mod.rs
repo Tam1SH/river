@@ -22,7 +22,7 @@ use pingora_load_balancing::{
 use pingora_proxy::{ProxyHttp, Session};
 
 use crate::{
-    config::internal::{PathControl, ProxyConfig, SelectionKind},
+    config::internal::{PathControl, ProxyConfig, SelectionKind, Upstream},
     populate_listners,
     proxy::{
         request_modifiers::RequestModifyMod, request_selector::RequestSelector,
@@ -41,7 +41,7 @@ pub mod request_modifiers;
 pub mod request_selector;
 pub mod response_modifiers;
 pub mod wasm_modules;
-
+pub mod simple_response;
 pub struct RateLimiters {
     request_filter_stage_multi: Vec<MultiRaterInstance>,
     request_filter_stage_single: Vec<SingleInstance>,
@@ -91,17 +91,26 @@ where
         conf: ProxyConfig,
         server: &Server,
     ) -> Box<dyn pingora::services::Service> {
-        let modifiers = Modifiers::from_conf(&conf.path_control).unwrap();
+        let mut modifiers = Modifiers::from_conf(&conf.path_control).unwrap();
 
         // TODO: This maybe could be done cleaner? This is a sort-of inlined
         // version of `LoadBalancer::try_from_iter` with the ability to add
         // metadata extensions
         let mut backends = BTreeSet::new();
+        let mut static_roots: Vec<Box<dyn RequestFilterMod>> = vec![];
         for uppy in conf.upstreams {
-            let mut backend = Backend::new(&uppy._address.to_string()).unwrap();
-            assert!(backend.ext.insert::<HttpPeer>(uppy).is_none());
-            backends.insert(backend);
+            match uppy {
+                Upstream::Static(response) => static_roots.push(Box::new(response)),
+                Upstream::Service(s) => {
+                    let mut backend =  Backend::new(&s._address.to_string()).unwrap();
+                    assert!(backend.ext.insert(s).is_none());
+                    backends.insert(backend);
+                }
+            }
         }
+        
+        modifiers.request_filters.extend(static_roots);
+
         let disco = discovery::Static::new(backends);
         let upstreams = LoadBalancer::<BS>::from_backends(Backends::new(disco));
         upstreams

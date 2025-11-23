@@ -50,6 +50,7 @@ pingora-core = { version = "0.6.0", features = ["openssl", "openssl_derived"] }
 pingora-proxy = "0.6.0"
 pingora-http = "0.6.0"
 pingora-load-balancing = "0.6.0"
+bytes = "1.11.0"
 
 
 [dev-dependencies]

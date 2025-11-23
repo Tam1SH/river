@@ -62,6 +62,7 @@ impl WasmModuleFilter {
         let component =  Component::from_file(engine, path)?;
         
         let mut builder = WasiCtx::builder();
+        
         let mut store: Store<ModuleState> = Store::new(engine, 
             ModuleState {
                 ctx: builder.build(),
@@ -86,7 +87,7 @@ impl WasmModuleFilter {
         let path = extract_val("path", &mut settings)?;
         
         let engine = Engine::default();
-        let this =  Self::new(
+        let this = Self::new(
                 &engine,
                 &path
             ).map_err(|e| {
@@ -101,6 +102,7 @@ impl WasmModuleFilter {
 
 
     fn register_logger(mut logger: wasmtime::component::LinkerInstance<'_, ModuleState> ) -> wasmtime::Result<()> {
+
         logger.func_wrap("info", |_, (message, ): (String, )| {
             tracing::info!("WASM LOG: {}", message);
             Ok(())

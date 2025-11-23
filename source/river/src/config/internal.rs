@@ -117,6 +117,16 @@ impl Config {
 pub struct RateLimitingConfig {
     pub(crate) rules: Vec<AllRateConfig>,
 }
+#[derive(Debug, Clone)]
+pub struct SimpleResponse {
+    pub http_code: http::StatusCode,
+    pub response_body: String
+}
+#[derive(Debug, Clone)]
+pub enum Upstream {
+    Service(HttpPeer),
+    Static(SimpleResponse)
+}
 
 /// Add Path Control Modifiers
 ///
@@ -148,7 +158,7 @@ pub struct ProxyConfig {
     pub(crate) name: String,
     pub(crate) listeners: Vec<ListenerConfig>,
     pub(crate) upstream_options: UpstreamOptions,
-    pub(crate) upstreams: Vec<HttpPeer>,
+    pub(crate) upstreams: Vec<Upstream>,
     pub(crate) path_control: PathControl,
     pub(crate) rate_limiting: RateLimitingConfig,
 }

@@ -150,7 +150,7 @@ impl From<ProxyConfig> for super::internal::ProxyConfig {
         Self {
             name: other.name,
             listeners: other.listeners.into_iter().map(Into::into).collect(),
-            upstreams: vec![other.connector.into()],
+            upstreams: todo!(),
             path_control: other.path_control.into(),
             upstream_options: UpstreamOptions::default(),
             rate_limiting: RateLimitingConfig::default(),
@@ -206,7 +206,7 @@ pub mod test {
 
     use crate::config::{
         apply_toml,
-        internal::{self, RateLimitingConfig, UpstreamOptions},
+        internal::{self, RateLimitingConfig, Upstream, UpstreamOptions},
         toml::{ConnectorConfig, ListenerConfig, ProxyConfig, System},
     };
 
@@ -335,11 +335,11 @@ pub mod test {
                             },
                         },
                     ],
-                    upstreams: vec![HttpPeer::new(
+                    upstreams: vec![Upstream::Service(HttpPeer::new(
                         "91.107.223.4:443",
                         true,
                         String::from("onevariable.com"),
-                    )],
+                    ))],
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![
                             BTreeMap::from([
@@ -377,7 +377,7 @@ pub mod test {
                             offer_h2: false,
                         },
                     }],
-                    upstreams: vec![HttpPeer::new("91.107.223.4:80", false, String::new())],
+                    upstreams: vec![Upstream::Service(HttpPeer::new("91.107.223.4:80", false, String::new()))],
                     path_control: internal::PathControl {
                         upstream_request_filters: vec![],
                         upstream_response_filters: vec![],
