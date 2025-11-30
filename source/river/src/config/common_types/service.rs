@@ -3,7 +3,6 @@ use crate::config::{common_types::{SectionParser, connectors::Connectors, listen
 pub struct ServiceSection<'a, T> {
     listeners: &'a dyn SectionParser<T, Listeners>,
     connectors: &'a dyn SectionParser<T, Connectors>,
-    pc: &'a dyn SectionParser<T, PathControl>,
     rl: &'a dyn SectionParser<T, RateLimitingConfig>,
     name: &'a str
 }
@@ -16,11 +15,10 @@ impl<'a, T> ServiceSection<'a, T> {
     pub fn new(
         listeners: &'a dyn SectionParser<T, Listeners>,
         connectors: &'a dyn SectionParser<T, Connectors>,
-        pc: &'a dyn SectionParser<T, PathControl>,
         rl: &'a dyn SectionParser<T, RateLimitingConfig>,
         name: &'a str
     ) -> Self {
-        Self { listeners, connectors, pc, rl, name }
+        Self { listeners, connectors, rl, name }
     }
 }
 
@@ -30,14 +28,12 @@ impl<T> ServiceSectionParser<T> for ServiceSection<'_, T> {
         
         let listeners = self.listeners.parse_node(node)?;
         let connectors = self.connectors.parse_node(node)?;
-        let pc = self.pc.parse_node(node)?;
         let rl = self.rl.parse_node(node)?;
 
         Ok(ProxyConfig {
             name: self.name.to_string(),
             listeners,
             connectors,
-            path_control: pc,
             rate_limiting: rl,
         })
     }

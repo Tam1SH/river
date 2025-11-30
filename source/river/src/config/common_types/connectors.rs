@@ -40,6 +40,6 @@ pub struct Connectors {
 #[derive(Debug, Clone)]
 pub struct UpstreamConfig {
     pub upstream: Upstream,
-    pub rules: Vec<Modificator>,
+    pub chains: Vec<Modificator>,
     pub lb_options: UpstreamOptions,
 }

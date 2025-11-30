@@ -10,8 +10,6 @@ use crate::proxy::filters::builtin::{
 };
 
 
-
-#[macro_export]
 macro_rules! generate_registry {
     (
         fn $fn_name:ident;
@@ -34,18 +32,26 @@ macro_rules! generate_registry {
             }
         )?
     ) => {
-        pub fn $fn_name() -> $crate::proxy::filters::registry::FilterRegistry {
+        /// Registers all built-in (native) filters into the registry.
+        ///
+        /// These filters are compiled directly into the binary. For implementation details
+        /// and the list of available filters, refer to the [`proxy::filters::builtin`] module
+        pub fn $fn_name(
+            definitions: &mut $crate::config::common_types::definitions::DefinitionsTable
+        ) -> $crate::proxy::filters::registry::FilterRegistry {
             let mut registry = $crate::proxy::filters::registry::FilterRegistry::new();
 
             $($(
+                definitions.available_filters.insert($action_key.to_string());
+
                 registry.register_factory($action_key, Box::new(|settings| {
-                    // Используем from_settings указанного типа
                     let item = <$action_type>::from_settings(settings)?;
                     Ok($crate::proxy::filters::registry::FilterInstance::Action(Box::new(item)))
                 }));
             )*)?
 
             $($(
+                definitions.available_filters.insert($req_key.to_string());
                 registry.register_factory($req_key, Box::new(|settings| {
                     let item = <$req_type>::from_settings(settings)?;
                     Ok($crate::proxy::filters::registry::FilterInstance::Request(Box::new(item)))
@@ -53,6 +59,7 @@ macro_rules! generate_registry {
             )*)?
 
             $($(
+                definitions.available_filters.insert($res_key.to_string());
                 registry.register_factory($res_key, Box::new(|settings| {
                     let item = <$res_type>::from_settings(settings)?;
                     Ok($crate::proxy::filters::registry::FilterInstance::Response(Box::new(item)))

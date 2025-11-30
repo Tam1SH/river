@@ -131,11 +131,10 @@ pub struct SimpleResponse {
 
 #[derive(Clone, Debug)]
 pub struct ProxyConfig {
-    pub(crate) name: String,
-    pub(crate) listeners: Listeners,
-    pub(crate) connectors: Connectors,
-    pub(crate) path_control: PathControl,
-    pub(crate) rate_limiting: RateLimitingConfig,
+    pub name: String,
+    pub listeners: Listeners,
+    pub connectors: Connectors,
+    pub rate_limiting: RateLimitingConfig,
 }
 
 #[derive(Debug, PartialEq, Clone)]

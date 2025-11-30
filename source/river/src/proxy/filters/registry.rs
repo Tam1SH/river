@@ -63,6 +63,7 @@ mod tests {
     use crate::config::common_types::definitions::{ConfiguredFilter, DefinitionsTable, FilterChain};
     use crate::proxy::RiverContext;
     use crate::proxy::filters::chain_resolver::ChainResolver;
+    use crate::proxy::filters::generate_registry::load_registry;
     use crate::proxy::filters::registry::{FilterRegistry, FilterInstance};
     use crate::proxy::{RequestModifyMod, RequestFilterMod};
     
@@ -107,6 +108,27 @@ mod tests {
         
         reg
     }
+
+     #[test]
+    fn test_builtin_filters_population() {
+        
+        let mut definitions = DefinitionsTable::default();
+        
+        
+        assert!(definitions.available_filters.is_empty());
+
+        
+        let _registry = load_registry(&mut definitions);
+
+        assert!(definitions.available_filters.contains("river.filters.block-cidr-range"));
+        assert!(definitions.available_filters.contains("river.response.upsert-header"));
+        assert!(definitions.available_filters.contains("river.response.remove-header"));
+        assert!(definitions.available_filters.contains("river.request.upsert-header"));
+        assert!(definitions.available_filters.contains("river.request.remove-header"));
+
+        assert_eq!(definitions.available_filters.len(), 5);
+    }
+
 
     #[tokio::test]
     async fn test_compile_success() {

@@ -96,7 +96,6 @@ impl DefinitionsTable {
             self.available_filters.insert(filter);
         }
 
-        
         for (name, chain) in other.chains {
             if self.chains.contains_key(&name) {
                 

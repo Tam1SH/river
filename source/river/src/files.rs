@@ -8,7 +8,7 @@ use pingora_core::Result;
 use pingora_proxy::{ProxyHttp, Session};
 use static_files_module::{StaticFilesConf, StaticFilesHandler};
 
-use crate::{config::common_types::file_server::FileServerConfig, populate_listners};
+use crate::{config::common_types::file_server::FileServerConfig, proxy::populate_listeners::populate_listners};
 
 /// Create a new file serving service
 pub fn river_file_server(

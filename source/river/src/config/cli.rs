@@ -74,7 +74,7 @@ pub async fn render_config() -> miette::Result<(Config, ChainResolver)> {
 
 
     let mut global_definitions = DefinitionsTable::default();
-    let mut registry = generate_registry::load_registry();
+    let mut registry = generate_registry::load_registry(&mut global_definitions);
     
     // 2.6.7: River MUST give the following priority to configuration:
     //   1. Command Line Options (highest priority)

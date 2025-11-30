@@ -47,13 +47,13 @@ impl<'a> UpstreamFactory<'a> {
             .expect("static should not block")
             .expect("static should not error");
 
-        let mut rules = Vec::new();
+        let mut chains = Vec::new();
         
-        for modificator in config.rules {
+        for modificator in config.chains {
             match modificator {
                 Modificator::Chain(named_chain) => {
                     let chain = self.resolver.resolve(&named_chain.name)?;
-                    rules.push(chain);
+                    chains.push(chain);
                 }
             }
         }
@@ -61,7 +61,7 @@ impl<'a> UpstreamFactory<'a> {
         let ctx = UpstreamContext { 
             balancer: Balancer { selector: config.lb_options.selector, balancer_type }, 
             upstream: config.upstream, 
-            chains: rules
+            chains
         };
 
         Ok(ctx)

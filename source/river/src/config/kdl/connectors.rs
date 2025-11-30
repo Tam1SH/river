@@ -441,7 +441,7 @@ fn flatten_nodes(
                 // Leaf node: create the final object combining upstream and context
                 results.push(UpstreamConfig {
                     upstream: up,
-                    rules: current_rules.clone(),
+                    chains: current_rules.clone(),
                     lb_options: current_lb.clone().unwrap_or_default(),
                 });
             },
@@ -491,6 +491,62 @@ mod tests {
         conn_parser.parse_node(&doc)
     }
 
+    const ARGS_PARSING_TEST: &str = r#"
+    definitions {
+        modifiers {
+            chain-filters "defined_with_args" {
+                filter name="set-header" key="X-Region" value="EU"
+                filter name="log-request"
+            }
+        }
+    }
+
+    connectors {
+        use-chain {
+            filter name="rate-limit" rps="100" burst="20"
+        }
+        use-chain "defined_with_args"
+        proxy "http://127.0.0.1:8080"
+    }
+    "#;
+
+    #[test]
+    fn test_filter_args_parsing() {
+        let connectors = parse_config(ARGS_PARSING_TEST).expect("Parsing failed");
+        let upstream = &connectors.upstreams[0];
+
+        assert_eq!(upstream.chains.len(), 2);
+
+        match &upstream.chains[0] {
+            Modificator::Chain(named_chain) => {
+                assert!(named_chain.name.contains("__anon_"), "Should be anonymous");
+                let filter = &named_chain.chain.filters[0];
+                
+                assert_eq!(filter.name, "rate-limit");
+                assert_eq!(filter.args.len(), 2);
+                assert_eq!(filter.args.get("rps").map(|s| s.as_str()), Some("100"));
+                assert_eq!(filter.args.get("burst").map(|s| s.as_str()), Some("20"));
+            }
+        }
+
+        match &upstream.chains[1] {
+            Modificator::Chain(named_chain) => {
+                assert_eq!(named_chain.name, "defined_with_args");
+                assert_eq!(named_chain.chain.filters.len(), 2);
+
+                let filter1 = &named_chain.chain.filters[0];
+                assert_eq!(filter1.name, "set-header");
+                assert_eq!(filter1.args.len(), 2);
+                assert_eq!(filter1.args.get("key").map(|s| s.as_str()), Some("X-Region"));
+                assert_eq!(filter1.args.get("value").map(|s| s.as_str()), Some("EU"));
+
+                let filter2 = &named_chain.chain.filters[1];
+                assert_eq!(filter2.name, "log-request");
+                assert!(filter2.args.is_empty(), "Args should be empty");
+            }
+        }
+    }
+
     const ANONYMOUS_CHAIN_TEST: &str = r#"
     connectors {
         section "/anon" {
@@ -506,24 +562,21 @@ mod tests {
     fn test_anonymous_chain() {
         let connectors = parse_config(ANONYMOUS_CHAIN_TEST).expect("Parsing failed");
         let upstream = &connectors.upstreams[0];
-
         
-        assert_eq!(upstream.rules.len(), 1);
-        assert_eq!(connectors.anonymous_chains.len(), 1);
-
-        //check if is exist in anonymous_chains
-        
-        connectors.anonymous_chains.get("__anon_0__anon").unwrap();
-
-        match &upstream.rules[0] {
+        match &upstream.chains[0] {
             Modificator::Chain(named_chain) => {
                 assert_eq!(named_chain.chain.filters.len(), 1);
-                assert_eq!(named_chain.chain.filters[0].name, "logger");
-                assert_eq!(named_chain.chain.filters[0].args.get("level").map(|s| s.as_str()), Some("debug"));
+                let filter = &named_chain.chain.filters[0];
+                
+                assert_eq!(filter.name, "logger");
+                
+                let level_arg = filter.args.get("level").expect("Argument 'level' missing");
+                assert_eq!(level_arg, "debug");
+                
+                assert_eq!(filter.args.len(), 1);
             }
         }
     }
-
 
     const SIMPLE_CHAIN: &str = r#"
     definitions {
@@ -546,9 +599,9 @@ mod tests {
         let connectors = parse_config(SIMPLE_CHAIN).expect("Parsing failed");
         let upstream = &connectors.upstreams[0];
 
-        assert_eq!(upstream.rules.len(), 1, "Should have 1 rule (the chain)");
+        assert_eq!(upstream.chains.len(), 1, "Should have 1 rule (the chain)");
         
-        match &upstream.rules[0] {
+        match &upstream.chains[0] {
             Modificator::Chain(named_chain) => {
                 assert_eq!(named_chain.chain.filters.len(), 2);
                 assert_eq!(named_chain.chain.filters[0].name, "block-ip");
@@ -595,14 +648,14 @@ mod tests {
                 } == "/api")
             .expect("API upstream not found");
 
-        assert_eq!(api_upstream.rules.len(), 2);
+        assert_eq!(api_upstream.chains.len(), 2);
         
-        let Modificator::Chain(r1) = &api_upstream.rules[0];
+        let Modificator::Chain(r1) = &api_upstream.chains[0];
 
         assert_eq!(r1.chain.filters[0].name, "logger");
         
 
-        let Modificator::Chain(r2) = &api_upstream.rules[1];
+        let Modificator::Chain(r2) = &api_upstream.chains[1];
         assert_eq!(r2.chain.filters[0].name, "rate-limit");
         
         let public_upstream = connectors.upstreams.iter()
@@ -612,9 +665,9 @@ mod tests {
                 } == "/public")
             .expect("Public upstream not found");
 
-        assert_eq!(public_upstream.rules.len(), 1);
+        assert_eq!(public_upstream.chains.len(), 1);
 
-        let Modificator::Chain(r1) = &public_upstream.rules[0];
+        let Modificator::Chain(r1) = &public_upstream.chains[0];
         assert_eq!(r1.chain.filters[0].name, "logger");
     }
 
@@ -640,11 +693,11 @@ mod tests {
         let connectors = parse_config(MULTIPLE_CHAINS_IN_SCOPE).expect("Parsing failed");
         let upstream = &connectors.upstreams[0];
 
-        assert_eq!(upstream.rules.len(), 2);
+        assert_eq!(upstream.chains.len(), 2);
         
-        let Modificator::Chain(r) = &upstream.rules[0];
+        let Modificator::Chain(r) = &upstream.chains[0];
         assert_eq!(r.chain.filters[0].name, "A");
-        let Modificator::Chain(r) = &upstream.rules[1];
+        let Modificator::Chain(r) = &upstream.chains[1];
         assert_eq!(r.chain.filters[0].name, "B");
     }
 
@@ -667,7 +720,8 @@ mod tests {
         
         assert!(result.is_err());
         let err_msg = result.unwrap_err().help().unwrap().to_string();
-        assert!(err_msg.contains("Filter-chain 'GHOST' not exist"));
+        
+        assert!(err_msg.contains("Chain 'GHOST' not found in definitions"));
     }
     
     const CONNECTORS_NESTED_SECTIONS: &str = r#"

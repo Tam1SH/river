@@ -18,7 +18,7 @@ pub enum ListenerKind {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct ListenerConfig {
-    pub(crate) source: ListenerKind,
+    pub source: ListenerKind,
 }
 
 #[derive(Debug, Clone)]

@@ -23,14 +23,12 @@ use crate::config::kdl::{
     definitions::DefinitionsSection,
     file_server::FileServerSection,
     listeners::ListenersSection,
-    path_control::PathControlSection,
     rate_limiter::RateLimitSection,
     system_data::SystemDataSection,
     utils,
 };
 
 use crate::proxy::filters::registry::FilterRegistry;
-use crate::proxy::filters::{chain_resolver, generate_registry};
 use crate::proxy::plugins::store::WasmPluginStore;
 
 /// Orchestrates the loading and composition of the configuration from multiple KDL files.
@@ -167,7 +165,7 @@ impl ConfigLoader {
         // ---------------------------------------------------------
         // 3. Plugin Loading (WASM)
         // ---------------------------------------------------------
-        let store = WasmPluginStore::compile(&global_definitions).await?;
+        let store = WasmPluginStore::compile(global_definitions).await?;
         store.register_into(registry);
 
 
@@ -295,8 +293,7 @@ fn extract_service(
 ) -> miette::Result<ProxyConfig> {
     let config = ServiceSection::<_>::new(
         &ListenersSection::new(doc), 
-        &ConnectorsSection::new(doc, table), 
-        &PathControlSection::new(doc), 
+        &ConnectorsSection::new(doc, table),
         &RateLimitSection::new(doc, threads_per_service), 
         name
     ).parse_node(node)?;
@@ -309,6 +306,8 @@ fn extract_service(
 
 #[cfg(test)]
 mod tests {
+    use crate::proxy::filters::generate_registry;
+
     use super::*;
     use std::fs::File;
     use std::io::Write;
@@ -357,7 +356,7 @@ mod tests {
 
         let loader = ConfigLoader::new();
         let mut def_table = DefinitionsTable::default();
-        let mut registry: FilterRegistry = generate_registry::load_registry();
+        let mut registry: FilterRegistry = generate_registry::load_registry(&mut def_table);
         let config = loader.load_entry_point(Some(&main_path), &mut def_table, &mut registry).await.expect("Failed to load config").unwrap();
 
         assert_eq!(config.threads_per_service, 2);

@@ -49,14 +49,15 @@ impl<'a> ListenersSection<'a> {
         name: &str,
         args: &[KdlEntry],
     ) -> miette::Result<ListenerConfig> {
-
-        let args = utils::str_value_args(doc, args)?
-            .into_iter()
-            .collect::<HashMap<&str, &KdlEntry>>()
-            .ensure_only_keys(&["cert-path", "key-path", "offer-h2"], doc, node)?;
         
         // Is this a bindable name?
         if name.parse::<SocketAddr>().is_ok() {
+
+            let args = utils::str_value_args(doc, args)?
+                .into_iter()
+                .collect::<HashMap<&str, &KdlEntry>>()
+                .ensure_only_keys(&["cert-path", "key-path", "offer-h2"], doc, node)?;
+
             // Cool: do we have reasonable args for this?
             let cert_path = utils::map_ensure_str(doc, args.get("cert-path").copied())?;
             let key_path = utils::map_ensure_str(doc, args.get("key-path").copied())?;
@@ -103,13 +104,15 @@ impl<'a> ListenersSection<'a> {
                     },
                 }),
             }
-        } else if let Ok(pb) = name.parse::<PathBuf>() {
-            // TODO: Should we check that this path exists? Otherwise it seems to always match
-            Ok(ListenerConfig {
-                source: ListenerKind::Uds(pb),
-            })
-        } else {
-            Err(Bad::docspan("'{name}' is not a socketaddr or path?", doc, &node.span()).into())
+        } 
+        // else if let Ok(pb) = name.parse::<PathBuf>() {
+        //     // TODO: Should we check that this path exists? Otherwise it seems to always match
+        //     Ok(ListenerConfig {
+        //         source: ListenerKind::Uds(pb),
+        //     })
+        // } 
+        else {
+            Err(Bad::docspan(format!("'{name}' is not a socketaddr or path?"), doc, &node.span()).into())
         }
     }
 }
