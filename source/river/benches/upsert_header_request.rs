@@ -1,5 +1,6 @@
 use std::{fs::File, path::PathBuf, sync::mpsc, thread, time::Duration};
 use criterion::{criterion_group, criterion_main, Criterion};
+use fqdn::fqdn;
 use pprof::ProfilerGuardBuilder;
 use reqwest::Client;
 
@@ -26,7 +27,7 @@ use river::{
 };
 
 
-async fn setup_filters() -> (MockServer, Server) {
+async fn setup_filters() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("GET"))
@@ -48,7 +49,7 @@ async fn setup_filters() -> (MockServer, Server) {
 
     let chain = FilterChain {
         filters: vec![ConfiguredFilter {
-            name: "river.request.upsert-header".to_string(),
+            name: fqdn!("river.request.upsert-header"),
             args: HashMap::from([
                 ("key".to_string(), "X-Test".to_string()),
                 ("value".to_string(), "TEST".to_string()),
@@ -106,36 +107,27 @@ async fn setup_filters() -> (MockServer, Server) {
     app_server.bootstrap();
     app_server.add_services(vec![proxy_service]);
 
-    (mock_server, app_server)
+
+    let (tx, rx) = mpsc::channel();
+
+    
+    thread::spawn(move || {
+        
+        let (_mock_server, app_server) = (mock_server, app_server);
+
+        tx.send(()).expect("Failed to send ready signal");
+        app_server.run_forever();
+    });
+
+    
+    rx.recv().expect("Server failed to start");
 }
 
 
 
 fn criterion_benchmark(c: &mut Criterion) {
     
-    let (tx, rx) = mpsc::channel();
-
-    
-    thread::spawn(move || {
-        
-        let rt = tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to build runtime");
-
-        let (_mock_guard, server) = rt.block_on(async move {
-            
-            let (_mock_guard, server) = setup_filters().await;
-            
-            (_mock_guard, server)
-        });
-
-        tx.send(()).expect("Failed to send ready signal");
-        server.run_forever();
-    });
-
-    
-    rx.recv().expect("Server failed to start");
+    setup_filters();
 
     
     let client = Client::builder()

@@ -1,25 +1,46 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ptr::NonNull};
 use std::sync::Arc;
+use fqdn::FQDN;
 use futures_util::future::join_all;
+use pingora_http::{RequestHeader, ResponseHeader};
+use pingora_proxy::Session;
+use tokio::sync::Mutex;
 use wasmtime::{Engine, Store, component::{Component, Linker}};
 use miette::{Context, Result, miette};
 use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_io::IoView;
-use crate::{config::common_types::definitions::{DefinitionsTable, PluginSource}, proxy::{filters::registry::{FilterInstance, FilterRegistry}, plugins::{g, host::PluginHost, module::WasmModuleFilter}}};
+
+use crate::proxy::plugins::host::HostFunctions;
+use crate::proxy::plugins::module::TraitModuleState;
+use crate::{
+    config::common_types::definitions::{DefinitionsTable, PluginSource}, 
+    proxy::{
+        filters::registry::{FilterRegistry, RegistryFilterContainer}, 
+        plugins::{host::PluginHost, module::WasmModule}
+    }
+};
 
 use super::loader::PluginLoader;
 
+
+
+#[derive(Clone)]
 pub struct WasmArtifact {
-    pub name: String,
-    component: Component,
-    engine: Engine,
+    pub name: FQDN,
+    pub component: Component,
+    pub engine: Engine,
 }
 
 pub struct WasmPluginStore {
-    artifacts: HashMap<String, Arc<WasmArtifact>>,
+    artifacts: HashMap<FQDN, Arc<WasmArtifact>>,
 }
 
 impl WasmPluginStore {
+
+    /// Compiles the Wasm modules based on the provided definitions table.
+    ///
+    /// Note that this method only prepares the modules. The filter names defined 
+    /// in the configuration are registered later via [`WasmPluginStore::register_into`].
     pub async fn compile(table: &DefinitionsTable) -> Result<Self> {
         
         let engine = Engine::default();
@@ -35,7 +56,7 @@ impl WasmPluginStore {
             }
         });
 
-        
+
         let results = join_all(futures).await;
 
         let mut artifacts = HashMap::new();
@@ -49,29 +70,29 @@ impl WasmPluginStore {
         Ok(Self { artifacts })
     }
 
-    
+    /// Iterates over the definitions `table` to find filter definitions and 
+    /// registers them into the provided `registry`.
     pub fn register_into(&self, registry: &mut FilterRegistry) {
         for (name, artifact) in &self.artifacts {
             
             let artifact_ref = artifact.clone();
 
             let name = name.clone();
-            registry.register_factory(&name.clone(), Box::new(move |_| {
-                
-                let filter = Self::create_module(
-                    &artifact_ref
-                ).map_err(|e| 
-                    pingora::Error::new(
-                        pingora::ErrorType::Custom("Can't create wasm module")).more_context(format!("artifact name: '{name}'. error: {e}")
-                    )
-                )?;
+            registry.register_factory(name.clone(), Box::new(move |_| {
 
-                Ok(FilterInstance::Action(Box::new(filter)))
+                let module = Self::create_module(&artifact_ref)
+                    .map_err(|e| 
+                        pingora::Error::new(
+                            pingora::ErrorType::Custom("Can't create wasm module")).more_context(format!("artifact name: '{name}'. error: {e}")
+                        )
+                    )?;
+                
+                Ok(RegistryFilterContainer::Plugin(module))
             }));
         }
     }
 
-    pub async fn create_artifact(name: String, source: &PluginSource, engine: &Engine) -> Result<WasmArtifact> {
+    pub async fn create_artifact(name: FQDN, source: &PluginSource, engine: &Engine) -> Result<WasmArtifact> {
         tracing::debug!("Preparing plugin '{}'...", name);
 
         PluginLoader::check_availability(source).await
@@ -94,33 +115,35 @@ impl WasmPluginStore {
         })
     }
 
-    pub fn create_module(artifact: &WasmArtifact) -> wasmtime::Result<WasmModuleFilter> {
+    pub fn create_module<T: TraitModuleState>(artifact: &WasmArtifact) -> wasmtime::Result<WasmModule<T>> {
         
-        let mut builder = WasiCtx::builder();
-        
-        let mut store: Store<ModuleState> = Store::new(&artifact.engine, 
-            ModuleState {
-                ctx: builder.build(),
-                table: ResourceTable::new(),
-            }
-        );
-
-        let mut linker: Linker<ModuleState> = Linker::new(&artifact.engine);
+        let mut linker: Linker<T> = Linker::new(&artifact.engine);
 
         PluginHost::register_enviroment(&mut linker)?;
-
-        let instance = g::FilterWorld::instantiate(&mut store, &artifact.component, &linker)?;
-
-        Ok(WasmModuleFilter::new(
-            store.into(),
-            instance,
+        
+        Ok(WasmModule::new(
+            artifact.clone(),
+            linker
         ))
     }
 }
 
+#[derive(Default)]
 pub struct ModuleState {
     pub ctx: WasiCtx,
     pub table: ResourceTable,
+    pub session: Option<SessionCtx>
+}
+
+
+
+unsafe impl Send for ModuleState {}
+unsafe impl Sync for ModuleState {}
+
+pub struct SessionCtx {
+    pub session: NonNull<Session>,
+    pub req_header: Option<NonNull<RequestHeader>>,
+    pub res_headers: Option<NonNull<ResponseHeader>>,
 }
 
 
@@ -141,6 +164,7 @@ mod tests {
 
     use super::*;
     use std::collections::{HashMap, HashSet};
+    use std::str::FromStr;
     use wiremock::{MockServer, Mock, ResponseTemplate};
     use wiremock::matchers::{method, path};
 
@@ -149,8 +173,8 @@ mod tests {
     
     fn create_rules_table(plugin_name: &str, source: PluginSource) -> DefinitionsTable {
         let mut plugins = HashMap::new();
-        plugins.insert(plugin_name.to_string(), PluginDefinition {
-            name: plugin_name.to_string(),
+        plugins.insert(FQDN::from_str(plugin_name).unwrap(), PluginDefinition {
+            name: FQDN::from_str(plugin_name).unwrap(),
             source,
         });
 
@@ -184,9 +208,9 @@ mod tests {
         
         let factory = WasmPluginStore::compile(&table).await.expect("Factory initialization failed");
 
-        assert!(factory.artifacts.contains_key("test-plugin"));
+        assert!(factory.artifacts.contains_key(&FQDN::from_str("test-plugin").unwrap()));
         
-        let artifact = factory.artifacts.get("test-plugin").unwrap();
+        let artifact = factory.artifacts.get(&FQDN::from_str("test-plugin").unwrap()).unwrap();
         assert_eq!(artifact.name, "test-plugin");
     }
 
@@ -256,12 +280,14 @@ mod tests {
         tokio::fs::write(&file_path, WASM_BYTES).await.unwrap();
 
         let mut plugins = HashMap::new();
-        plugins.insert("remote".to_string(), PluginDefinition {
-            name: "remote".to_string(),
+
+        plugins.insert(FQDN::from_str("remote").unwrap(), PluginDefinition {
+            name: FQDN::from_str("remote").unwrap(),
             source: PluginSource::Url(url),
         });
-        plugins.insert("local".to_string(), PluginDefinition {
-            name: "local".to_string(),
+
+        plugins.insert(FQDN::from_str("local").unwrap(), PluginDefinition {
+            name: FQDN::from_str("local").unwrap(),
             source: PluginSource::File(file_path),
         });
 
@@ -271,7 +297,7 @@ mod tests {
 
         let factory = WasmPluginStore::compile(&table).await.expect("Should load mixed sources");
         
-        assert!(factory.artifacts.contains_key("remote"));
-        assert!(factory.artifacts.contains_key("local"));
+        assert!(factory.artifacts.contains_key(&FQDN::from_str("remote").unwrap()));
+        assert!(factory.artifacts.contains_key(&FQDN::from_str("local").unwrap()));
     }
 }

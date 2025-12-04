@@ -15,15 +15,6 @@ definitions {
                 def name="upsert-header"
                 def name="remove-header"
             }
-            // namespace "rate-limiting" {
-            //     def name="source-ip"
-            //     def name="specific-uri"
-            //     def name="any-matching-uri"
-            // }
         }
     }
-}
-
-includes {
-    include "./"
 }

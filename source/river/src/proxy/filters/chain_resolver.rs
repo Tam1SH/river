@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use crate::config::common_types::definitions::{DefinitionsTable, FilterChain};
-use crate::proxy::filters::registry::{FilterRegistry, FilterInstance};
-use crate::proxy::{RequestFilterMod, RequestModifyMod, ResponseModifyMod};
+use crate::proxy::filters::registry::{FilterInstance, FilterRegistry, RegistryFilterContainer};
+use crate::proxy::filters::types::{RequestFilterMod, RequestModifyMod, ResponseModifyMod};
+use crate::proxy::plugins::module::{FilterType, WasmInvoker};
 use miette::{Context, IntoDiagnostic, Result, miette};
 
 #[derive(Default)]
@@ -10,7 +11,6 @@ pub struct RuntimeChain {
     pub req_mods: Vec<Box<dyn RequestModifyMod>>,
     pub res_mods: Vec<Box<dyn ResponseModifyMod>>,
 }
-
 
 pub struct ChainResolver {
     table: DefinitionsTable,
@@ -57,16 +57,35 @@ impl ChainResolver {
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect();
 
-            let instance = self.registry
-                .build(&filter_cfg.name, settings)
+            let container = self.registry
+                .build(&filter_cfg.name, settings.clone())
                 .into_diagnostic()
                 .wrap_err_with(|| format!("Failed to build filter '{}' in chain '{}'", filter_cfg.name, context_name))?;
 
-            match instance {
-                FilterInstance::Action(f) => runtime_chain.actions.push(f),
-                FilterInstance::Request(f) => runtime_chain.req_mods.push(f),
-                FilterInstance::Response(f) => runtime_chain.res_mods.push(f),
+            match container {
+                RegistryFilterContainer::Builtin(builtin) => {
+                    match builtin {
+                        FilterInstance::Action(f) => runtime_chain.actions.push(f),
+                        FilterInstance::Request(f) => runtime_chain.req_mods.push(f),
+                        FilterInstance::Response(f) => runtime_chain.res_mods.push(f),
+                    }
+                }
+                RegistryFilterContainer::Plugin(plugin) => {
+                    
+                    let (_plugin_name, filter_name) = filter_cfg.name.as_c_str().to_str().expect("invariant violated: not a valid UTF-8")
+                        .split_once('.')
+                        .ok_or_else(|| miette!("Invalid filter format: '{}'. Expected 'plugin.filter'", filter_cfg.name))?;
+
+                    let invoker = WasmInvoker::new(plugin, filter_name.to_string(), settings);
+
+                    match invoker.get_filter_type()? {
+                        FilterType::Filter => Box::new(invoker),
+                        FilterType::OnRequest => Box::new(invoker),
+                        FilterType::OnResponse => Box::new(invoker)
+                    };
+                }
             }
+
         }
 
         Ok(runtime_chain)

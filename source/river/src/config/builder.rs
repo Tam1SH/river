@@ -163,14 +163,7 @@ impl ConfigLoader {
 
 
         // ---------------------------------------------------------
-        // 3. Plugin Loading (WASM)
-        // ---------------------------------------------------------
-        let store = WasmPluginStore::compile(global_definitions).await?;
-        store.register_into(registry);
-
-
-        // ---------------------------------------------------------
-        // 4. Services Merge
+        // 3. Services Merge
         // ---------------------------------------------------------
         let mut service_names = HashSet::new();
 
@@ -201,11 +194,12 @@ impl ConfigLoader {
         }
 
         // ---------------------------------------------------------
-        // 5. Rule Compilation
+        // 4. Wasm compile
         // ---------------------------------------------------------
-        
-        // let _runtime_chains = chain_resolver::compile_rules(&global_definitions, &mut registry).await?;
 
+        let store = WasmPluginStore::compile(global_definitions).await?;
+        store.register_into(registry);
+        
         Ok(final_config)
     }
 }
@@ -312,6 +306,204 @@ mod tests {
     use std::fs::File;
     use std::io::Write;
     use tempfile::tempdir;
+    use fqdn::fqdn;
+    #[tokio::test]
+    async fn test_namespace_merge_across_files() {
+        
+        let dir = tempdir().unwrap();
+
+        const DEF_ONE: &str = r#"
+        definitions {
+            modifiers {
+                namespace "river" {
+                    namespace "inner" {
+                        def name="one"
+                    }
+                }
+            }
+        }
+        "#;
+
+        const DEF_TWO: &str = r#"
+        definitions {
+            modifiers {
+                namespace "river" {
+                    namespace "inner" {
+                        def name="two"
+                    }
+                }
+            }
+        }
+        "#;
+
+        const MAIN_CONFIG: &str = r#"
+        includes {
+            include "./def1.kdl"
+            include "./def2.kdl"
+        }
+        
+        system {
+            threads-per-service 1
+        }
+
+        services {
+            TestService {
+                listeners { "127.0.0.1:8080" }
+                connectors {
+                    return code="200" response="OK"
+                }
+            }
+        }
+        "#;
+
+        let def1_path = dir.path().join("def1.kdl");
+        File::create(&def1_path).unwrap()
+            .write_all(DEF_ONE.as_bytes()).unwrap();
+
+        let def2_path = dir.path().join("def2.kdl");
+        File::create(&def2_path).unwrap()
+            .write_all(DEF_TWO.as_bytes()).unwrap();
+
+        let main_path = dir.path().join("main.kdl");
+        File::create(&main_path).unwrap()
+            .write_all(MAIN_CONFIG.as_bytes()).unwrap();
+
+        let loader = ConfigLoader::new();
+        let mut def_table = DefinitionsTable::default();
+        let mut registry: FilterRegistry = generate_registry::load_registry(&mut def_table);
+
+        loader.load_entry_point(Some(&main_path), &mut def_table, &mut registry).await.expect("Config should load successfully");
+
+        assert!(
+            def_table.available_filters.contains(&fqdn!("river.inner.one")),
+            "FQDN 'river.inner.one' is missing in global definitions"
+        );
+        assert!(
+            def_table.available_filters.contains(&fqdn!("river.inner.two")),
+            "FQDN 'river.inner.two' is missing in global definitions"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_plugin_definition_across_files() {
+        let dir = tempdir().unwrap();
+
+        const SHARED_PLUGIN: &str = r#"
+        definitions {
+            plugins {
+                plugin {
+                    name "duplicate-plugin"
+                    load path="./assets/filter.wasm"
+                }
+            }
+        }
+        "#;
+
+        const MAIN_CONFIG: &str = r#"
+        includes {
+            include "./def1.kdl"
+            include "./def2.kdl"
+        }
+        
+        system {
+            threads-per-service 1
+        }
+
+        services {
+            TestService {
+                listeners { "127.0.0.1:8080" }
+                connectors {
+                    use-chain "test-chain"
+                    return code="200" response="OK"
+                }
+            }
+        }
+        "#;
+
+        let def1_path = dir.path().join("def1.kdl");
+        File::create(&def1_path).unwrap()
+            .write_all(SHARED_PLUGIN.as_bytes()).unwrap();
+
+        let def2_path = dir.path().join("def2.kdl");
+        File::create(&def2_path).unwrap()
+            .write_all(SHARED_PLUGIN.as_bytes()).unwrap();
+
+        let main_path = dir.path().join("main.kdl");
+        File::create(&main_path).unwrap()
+            .write_all(MAIN_CONFIG.as_bytes()).unwrap();
+
+        let loader = ConfigLoader::new();
+        let mut def_table = DefinitionsTable::default();
+        let mut registry: FilterRegistry = generate_registry::load_registry(&mut def_table);
+
+        let result = loader.load_entry_point(Some(&main_path), &mut def_table, &mut registry).await;
+
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+
+        crate::assert_err_contains!(err_msg, "Duplicate plugin definition across files: 'duplicate-plugin'");
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_chain_definition_across_files() {
+        let dir = tempdir().unwrap();
+
+        const SHARED_DEF: &str = r#"
+            definitions {
+                modifiers {
+                    chain-filters "conflict-chain" { }
+                }
+            }
+        "#;
+
+        const MAIN_CONFIG: &str = r#"
+            includes {
+                include "./def1.kdl"
+                include "./def2.kdl"
+            }
+            
+            system {
+                threads-per-service 1
+            }
+
+            services { 
+                TestService {
+                    listeners { "127.0.0.1:8080" }
+                    connectors {
+                        use-chain "test-chain"
+                        return code="200" response="OK"
+                    }
+                }
+            }
+        "#;
+        
+    
+        let def1_path = dir.path().join("def1.kdl");
+        File::create(&def1_path).unwrap()
+            .write_all(SHARED_DEF.as_bytes()).unwrap();
+        
+        
+        let def2_path = dir.path().join("def2.kdl");
+        File::create(&def2_path).unwrap()
+            .write_all(SHARED_DEF.as_bytes()).unwrap();
+
+            
+        let main_path = dir.path().join("main.kdl");
+        File::create(&main_path).unwrap()
+            .write_all(MAIN_CONFIG.as_bytes()).unwrap();
+
+            
+        let loader = ConfigLoader::new();
+        let mut def_table = DefinitionsTable::default();
+        let mut registry: FilterRegistry = generate_registry::load_registry(&mut def_table);
+
+        
+        let result = loader.load_entry_point(Some(&main_path), &mut def_table, &mut registry).await;
+
+        let err_msg = result.unwrap_err().to_string();
+        crate::assert_err_contains!(err_msg, "Duplicate chain definition across files: 'conflict-chain'");
+    }
 
     #[tokio::test]
     async fn test_include_logic() {

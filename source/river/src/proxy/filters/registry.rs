@@ -1,8 +1,9 @@
 use std::collections::{BTreeMap, HashMap};
+use fqdn::FQDN;
 use pingora_core::{Error, ErrorType, Result};
 
 use crate::proxy::{
-    RequestFilterMod, RequestModifyMod, ResponseModifyMod,
+    RequestFilterMod, RequestModifyMod, ResponseModifyMod, plugins::module::WasmModule,
 };
 
 pub enum FilterInstance {
@@ -11,7 +12,13 @@ pub enum FilterInstance {
     Response(Box<dyn ResponseModifyMod>),
 }
 
-type FilterFactoryFn = Box<dyn Fn(BTreeMap<String, String>) -> Result<FilterInstance> + Send + Sync>;
+#[allow(clippy::large_enum_variant)]
+pub enum RegistryFilterContainer {
+    Builtin(FilterInstance),
+    Plugin(WasmModule)
+}
+
+type FiltersContainerFactoryFn = Box<dyn Fn(BTreeMap<String, String>) -> Result<RegistryFilterContainer> + Send + Sync>;
 
 /// The central repository for all available filter blueprints (factories).
 ///
@@ -25,7 +32,7 @@ type FilterFactoryFn = Box<dyn Fn(BTreeMap<String, String>) -> Result<FilterInst
 /// - **Usage**: Consulted when `compile_rules` encounters a `filter name="..."` directive.
 #[derive(Default)]
 pub struct FilterRegistry {
-    factories: HashMap<String, FilterFactoryFn>,
+    factories: HashMap<FQDN, FiltersContainerFactoryFn>,
 }
 
 impl FilterRegistry {
@@ -33,13 +40,13 @@ impl FilterRegistry {
         Self::default()
     }
 
-    pub fn register_factory(&mut self, name: &str, factory: FilterFactoryFn) {
-        if self.factories.insert(name.to_string(), factory).is_some() {
+    pub fn register_factory(&mut self, name: FQDN, factory: FiltersContainerFactoryFn) {
+        if self.factories.insert(name.clone(), factory).is_some() {
             tracing::warn!("Filter factory '{}' was overwritten", name);
         }
     }
 
-    pub fn build(&self, name: &str, settings: BTreeMap<String, String>) -> Result<FilterInstance> {
+    pub fn build(&self, name: &FQDN, settings: BTreeMap<String, String>) -> Result<RegistryFilterContainer> {
         let factory = self.factories.get(name).ok_or_else(|| {
             Error::new(ErrorType::Custom("Filter is not registered in the binary")).more_context(format!("filter name: '{name}'"))
         })?;
@@ -47,7 +54,7 @@ impl FilterRegistry {
         factory(settings)
     }
 
-    pub fn contains(&self, name: &str) -> bool {
+    pub fn contains(&self, name: &FQDN) -> bool {
         self.factories.contains_key(name)
     }
 }
@@ -57,14 +64,18 @@ impl FilterRegistry {
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashMap};
+    use std::str::FromStr;
+
     use async_trait::async_trait;
+
+    use fqdn::FQDN;
     use pingora_core::Result;
     use pingora_proxy::Session;
     use crate::config::common_types::definitions::{ConfiguredFilter, DefinitionsTable, FilterChain};
     use crate::proxy::RiverContext;
     use crate::proxy::filters::chain_resolver::ChainResolver;
     use crate::proxy::filters::generate_registry::load_registry;
-    use crate::proxy::filters::registry::{FilterRegistry, FilterInstance};
+    use crate::proxy::filters::registry::{FilterInstance, FilterRegistry, RegistryFilterContainer};
     use crate::proxy::{RequestModifyMod, RequestFilterMod};
     
     struct MockHeaderFilter;
@@ -96,14 +107,14 @@ mod tests {
     fn setup_registry() -> FilterRegistry {
         let mut reg = FilterRegistry::new();
         
-        reg.register_factory("river.req.add_header", Box::new(|s| {
+        reg.register_factory(FQDN::from_str("river.req.add_header").unwrap(), Box::new(|s| {
             let f = MockHeaderFilter::from_settings(s)?;
-            Ok(FilterInstance::Request(Box::new(f)))
+            Ok(RegistryFilterContainer::Builtin(FilterInstance::Request(Box::new(f))))
         }));
         
-        reg.register_factory("river.sec.block", Box::new(|s| {
+        reg.register_factory(FQDN::from_str("river.sec.block").unwrap(), Box::new(|s| {
             let f = MockBlockFilter::from_settings(s)?;
-            Ok(FilterInstance::Action(Box::new(f)))
+            Ok(RegistryFilterContainer::Builtin(FilterInstance::Action(Box::new(f))))
         }));
         
         reg
@@ -119,12 +130,12 @@ mod tests {
 
         
         let _registry = load_registry(&mut definitions);
-
-        assert!(definitions.available_filters.contains("river.filters.block-cidr-range"));
-        assert!(definitions.available_filters.contains("river.response.upsert-header"));
-        assert!(definitions.available_filters.contains("river.response.remove-header"));
-        assert!(definitions.available_filters.contains("river.request.upsert-header"));
-        assert!(definitions.available_filters.contains("river.request.remove-header"));
+        
+        assert!(definitions.available_filters.contains(&FQDN::from_str("river.filters.block-cidr-range").unwrap()));
+        assert!(definitions.available_filters.contains(&FQDN::from_str("river.response.upsert-header").unwrap()));
+        assert!(definitions.available_filters.contains(&FQDN::from_str("river.response.remove-header").unwrap()));
+        assert!(definitions.available_filters.contains(&FQDN::from_str("river.request.upsert-header").unwrap()));
+        assert!(definitions.available_filters.contains(&FQDN::from_str("river.request.remove-header").unwrap()));
 
         assert_eq!(definitions.available_filters.len(), 5);
     }
@@ -136,8 +147,8 @@ mod tests {
         let mut definitions_table = DefinitionsTable::default();
 
         // Register available definitions (emulating `def name="..."`)
-        definitions_table.available_filters.insert("river.req.add_header".to_string());
-        definitions_table.available_filters.insert("river.sec.block".to_string());
+        definitions_table.available_filters.insert(FQDN::from_str("river.req.add_header").unwrap());
+        definitions_table.available_filters.insert(FQDN::from_str("river.sec.block").unwrap());
 
         // Construct the chain
         let mut header_args = HashMap::new();
@@ -146,11 +157,11 @@ mod tests {
 
         let filters = vec![
             ConfiguredFilter {
-                name: "river.sec.block".to_string(),
+                name: FQDN::from_str("river.sec.block").unwrap(),
                 args: HashMap::new(),
             },
             ConfiguredFilter {
-                name: "river.req.add_header".to_string(),
+                name: FQDN::from_str("river.req.add_header").unwrap(),
                 args: header_args,
             },
         ];
@@ -176,7 +187,7 @@ mod tests {
         
         let mut definitions_table = DefinitionsTable::default();
 
-        definitions_table.available_filters.insert("river.unknown_thing".to_string());
+        definitions_table.available_filters.insert(FQDN::from_str("river.unknown_thing").unwrap());
 
         
         let registry = setup_registry();
@@ -195,15 +206,15 @@ mod tests {
     #[tokio::test]
     async fn test_instantiation_failure() {
         let mut reg = FilterRegistry::new();
-        reg.register_factory("river.always_fail", Box::new(|_| {
+        reg.register_factory(FQDN::from_str("river.always_fail").unwrap(), Box::new(|_| {
             Err(pingora_core::Error::new(pingora_core::ErrorType::Custom("Init failed")))
         }));
         
         let mut table = DefinitionsTable::default();
-        table.available_filters.insert("river.always_fail".into());
+        table.available_filters.insert(FQDN::from_str("river.always_fail").unwrap());
         table.insert_chain("test", FilterChain {
             filters: vec![ConfiguredFilter {
-                name: "river.always_fail".into(),
+                name: FQDN::from_str("river.always_fail").unwrap(),
                 args: HashMap::new()
             }]
         });

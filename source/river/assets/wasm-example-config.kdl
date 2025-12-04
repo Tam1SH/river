@@ -8,8 +8,8 @@ system {
 definitions {
     plugins {
         plugin {
-            name "example-filter"
-            load url="https://github.com/Tam1SH/river/raw/refs/heads/main/source/river/assets/request_filter.wasm"
+            name "example-plugin"
+            load path="/path-to-your-module.wasm"
         }
     }
 }
@@ -21,10 +21,8 @@ services {
         }
         connectors {
             section "/" {
+                use-chain "example-plugin.my_filter"
                 return code="200" response="OK"
-                filter {
-                    
-                }
             }
         }
     }

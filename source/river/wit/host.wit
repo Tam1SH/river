@@ -1,0 +1,38 @@
+package river:proxy;
+
+interface logger {
+    info: func(msg: string);
+    warn: func(msg: string);
+    error: func(msg: string);
+    debug: func(msg: string);
+}
+
+interface context {
+    get-path: func() -> string;
+}
+
+interface filter-factory {
+
+    type config = list<tuple<string, string>>;
+
+    enum filter-type {
+        request,
+        response,
+        filter
+    }
+    resource filter-instance {
+        on-request: func() -> result<_, string>;
+        on-response: func() -> result<_, string>;
+        filter: func() -> result<bool, string>;
+    }
+
+    create: func(name: string, config: config) -> result<option<tuple<filter-instance, filter-type>>, string>;
+}
+
+
+world app {
+    import context;
+    import logger;
+
+    export filter-factory;
+}

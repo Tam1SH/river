@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
-    net::SocketAddr,
-    path::PathBuf,
+    net::SocketAddr
 };
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};

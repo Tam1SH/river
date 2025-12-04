@@ -1,5 +1,6 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
+use fqdn::FQDN;
 use kdl::{KdlDocument, KdlNode};
 
 use crate::config::{
@@ -55,13 +56,25 @@ impl<'a> DefinitionsSection<'a> {
                 "namespace" => {
                     let ns_name = utils::extract_one_str_arg(
                         self.doc, node, "namespace", args, |s| Some(s.to_string())
-                    )?;
+                    ).map_err(|_| {
+                        Bad::docspan(
+                            "Expected a valid name string argument after 'namespace'",
+                            self.doc,
+                            &node.span(),
+                        )
+                    })?;
                     self.parse_namespace_recursive(table, node, &ns_name)?;
                 }
                 "chain-filters" => {
                     let chain_name = utils::extract_one_str_arg(
                         self.doc, node, "chain-filters", args, |s| Some(s.to_string())
-                    )?;
+                    ).map_err(|_| {
+                        Bad::docspan(
+                            "Expected a valid name string argument after 'chain-filters'",
+                            self.doc,
+                            &node.span(),
+                        )
+                    })?;
                     self.parse_chain(table, node, chain_name)?;
                 }
                 _ => return Err(Bad::docspan(format!("Unknown directive: '{name}'"), self.doc, &node.span()).into()),
@@ -121,7 +134,6 @@ impl<'a> DefinitionsSection<'a> {
                         return Err(Bad::docspan("Duplicate 'load' directive", self.doc, &child_node.span()).into());
                     }
 
-                    // Собираем аргументы load: path="..." или url="..."
                     let args_map = utils::str_str_args(self.doc, args)?
                         .into_iter()
                         .collect::<HashMap<&str, &str>>()
@@ -149,7 +161,9 @@ impl<'a> DefinitionsSection<'a> {
             }
         }
 
-        let name = name.ok_or_else(|| Bad::docspan("Plugin must have a 'name'", self.doc, &node.span()))?;
+        let name = FQDN::from_str(&name
+            .ok_or_else(|| Bad::docspan("Plugin must have a 'name'", self.doc, &node.span()))?)
+            .map_err(|err| Bad::docspan(format!("Plugin name must be a valid FQDN, err: '{err}'"), self.doc, &node.span()))?;
         let source = source.ok_or_else(|| Bad::docspan("Plugin must have a 'load' directive", self.doc, &node.span()))?;
 
         Ok(PluginDefinition { name, source })
@@ -190,7 +204,10 @@ impl<'a> DefinitionsSection<'a> {
                         .ok_or_else(|| Bad::docspan("def requires 'name' argument", self.doc, &child_node.span()))?
                         .to_string();
 
-                    let fqdn = format!("{}.{}", prefix, def_name);
+                    let fqdn = FQDN::from_str(&format!("{}.{}", prefix, def_name))
+                        .map_err(|err| 
+                            Bad::docspan(format!("prefix('{prefix}') or def name('{def_name}') not valid FQDN, err: '{err}'"), self.doc, &child_node.span())
+                        )?;
 
                     if !table.available_filters.insert(fqdn.clone()) {
                         return Err(Bad::docspan(
@@ -276,11 +293,11 @@ mod tests {
 
         assert_eq!(table.plugins.len(), 2);
 
-        let local = table.plugins.get("local-wasm").unwrap();
+        let local = table.plugins.get(&FQDN::from_str("local-wasm").unwrap()).unwrap();
         assert_eq!(local.name, "local-wasm");
         assert_eq!(local.source, PluginSource::File(PathBuf::from("./assets/filter.wasm")));
 
-        let remote = table.plugins.get("remote-wasm").unwrap();
+        let remote = table.plugins.get(&FQDN::from_str("remote-wasm").unwrap()).unwrap();
         assert_eq!(remote.name, "remote-wasm");
         if let PluginSource::Url(u) = &remote.source {
             assert_eq!(u, "https://example.com/filter.wasm");
@@ -384,8 +401,8 @@ mod tests {
         let parser = DefinitionsSection::new(&doc);
         let table = parser.parse_node(&doc).unwrap();
 
-        assert!(table.available_filters.contains("river.inner.one"));
-        assert!(table.available_filters.contains("river.inner.two"));
+        assert!(table.available_filters.contains(&FQDN::from_str("river.inner.one").unwrap()));
+        assert!(table.available_filters.contains(&FQDN::from_str("river.inner.two").unwrap()));
     }
     
     const DUPLICATE_DEF_TEST: &str = r#"

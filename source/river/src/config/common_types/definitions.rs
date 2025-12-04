@@ -1,7 +1,6 @@
 
 use std::{collections::{HashMap, HashSet}, path::PathBuf};
-
-use crate::{config::kdl::connectors::ConnectorsSection, proxy::{filters::chain_resolver::ChainResolver, plugins::store::WasmPluginStore}};
+use fqdn::FQDN;
 
 /// Definitions Table (Intermediate Representation).
 ///
@@ -25,7 +24,7 @@ pub struct DefinitionsTable {
     /// Used for **"Fail Fast" validation**: allows the application to crash with a clear error
     /// *before* the proxy starts if a chain references a filter that was not declared
     /// via `def` or `plugin`.
-    pub available_filters: HashSet<String>,
+    pub available_filters: HashSet<FQDN>,
 
     /// A library of filter chain configurations.
     ///
@@ -38,7 +37,7 @@ pub struct DefinitionsTable {
     ///
     /// Stores information on *where* to retrieve the plugin code (File Path or URL),
     /// but does not hold the compiled code itself.
-    pub plugins: HashMap<String, PluginDefinition>,
+    pub plugins: HashMap<FQDN, PluginDefinition>,
 }
 
 #[derive(Debug, Clone)]
@@ -48,13 +47,13 @@ pub struct FilterChain {
 
 #[derive(Debug, Clone)]
 pub struct ConfiguredFilter {
-    pub name: String,
+    pub name: FQDN,
     pub args: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PluginDefinition {
-    pub name: String,
+    pub name: FQDN,
     pub source: PluginSource,
 }
 
@@ -66,15 +65,6 @@ pub enum PluginSource {
 
 
 impl DefinitionsTable {
-
-    #[allow(unused)]
-    pub fn new(
-        available_filters: HashSet<String>,
-        chains: HashMap<String, FilterChain>,
-        plugins: HashMap<String, PluginDefinition>
-    ) -> Self {
-        Self { available_filters, chains, plugins }
-    }
 
     pub fn get_chain_by_name(&self, name: &str) -> Option<FilterChain> {
         self.chains.get(name).cloned()
@@ -116,6 +106,16 @@ impl DefinitionsTable {
 
 }
 
+#[cfg(test)]
+impl DefinitionsTable {
+    pub fn new(
+        available_filters: HashSet<FQDN>,
+        chains: HashMap<String, FilterChain>,
+        plugins: HashMap<FQDN, PluginDefinition>
+    ) -> Self {
+        Self { available_filters, chains, plugins }
+    }
+}
 
 
 #[derive(Debug, Clone)]

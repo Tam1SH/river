@@ -40,7 +40,7 @@ pub async fn run(mut self) {
 
     
     let child = Command::new(&exec_path)
-        .args(&args) // Передаем обновленные аргументы
+        .args(&args) 
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .stdin(Stdio::null())

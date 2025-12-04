@@ -16,7 +16,7 @@ use pingora_proxy::{ProxyHttp, Session};
 use crate::{
     config::{common_types::{connectors::{Upstream, UpstreamConfig}, listeners::Listeners, rate_limiter::{AllRateConfig, RateLimitingConfig}}, internal::{ProxyConfig, SelectionKind, UpstreamOptions}},
     proxy::{
-        filters::{chain_resolver::ChainResolver, types::{RequestFilterMod, RequestModifyMod, ResponseModifyMod}}, plugins::module::WasmModuleFilter, populate_listeners::populate_listners, request_selector::{ContextInfo, RequestSelector, SessionInfo, null_selector}, upstream_factory::UpstreamFactory, upstream_router::{RouteType, UpstreamContext, UpstreamRouter}
+        filters::{chain_resolver::ChainResolver, types::{RequestFilterMod, RequestModifyMod, ResponseModifyMod}}, plugins::module::WasmModule, populate_listeners::populate_listners, request_selector::{ContextInfo, RequestSelector, SessionInfo, null_selector}, upstream_factory::UpstreamFactory, upstream_router::{RouteType, UpstreamContext, UpstreamRouter}
     },
 };
 

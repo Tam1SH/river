@@ -40,29 +40,33 @@ macro_rules! generate_registry {
             definitions: &mut $crate::config::common_types::definitions::DefinitionsTable
         ) -> $crate::proxy::filters::registry::FilterRegistry {
             let mut registry = $crate::proxy::filters::registry::FilterRegistry::new();
-
+            use std::str::FromStr;
+            use $crate::proxy::filters::registry::{RegistryFilterContainer, FilterInstance};
             $($(
-                definitions.available_filters.insert($action_key.to_string());
+                let action_key = fqdn::FQDN::from_str($action_key).expect("not valid FQDN");
+                definitions.available_filters.insert(action_key.clone());
 
-                registry.register_factory($action_key, Box::new(|settings| {
+                registry.register_factory(action_key, Box::new(|settings| {
                     let item = <$action_type>::from_settings(settings)?;
-                    Ok($crate::proxy::filters::registry::FilterInstance::Action(Box::new(item)))
+                    Ok(RegistryFilterContainer::Builtin(FilterInstance::Action(Box::new(item))))
                 }));
             )*)?
 
             $($(
-                definitions.available_filters.insert($req_key.to_string());
-                registry.register_factory($req_key, Box::new(|settings| {
+                let req_key = fqdn::FQDN::from_str($req_key).expect("not valid FQDN");
+                definitions.available_filters.insert(req_key.clone());
+                registry.register_factory(req_key, Box::new(|settings| {
                     let item = <$req_type>::from_settings(settings)?;
-                    Ok($crate::proxy::filters::registry::FilterInstance::Request(Box::new(item)))
+                    Ok(RegistryFilterContainer::Builtin(FilterInstance::Request(Box::new(item))))
                 }));
             )*)?
 
             $($(
-                definitions.available_filters.insert($res_key.to_string());
-                registry.register_factory($res_key, Box::new(|settings| {
+                let res_key = fqdn::FQDN::from_str($res_key).expect("not valid FQDN");
+                definitions.available_filters.insert(res_key.clone());
+                registry.register_factory(res_key, Box::new(|settings| {
                     let item = <$res_type>::from_settings(settings)?;
-                    Ok($crate::proxy::filters::registry::FilterInstance::Response(Box::new(item)))
+                    Ok(RegistryFilterContainer::Builtin(FilterInstance::Response(Box::new(item))))
                 }));
             )*)?
 

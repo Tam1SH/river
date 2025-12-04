@@ -61,3 +61,62 @@ impl RequestFilterMod for CidrRangeFilter {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_from_settings_valid_ipv4() {
+        let mut settings = BTreeMap::new();
+        settings.insert("addrs".to_string(), "192.168.0.0/16, 10.0.0.0/8".to_string());
+
+        let filter = CidrRangeFilter::from_settings(settings).expect("Should successfully create filter");
+
+        assert_eq!(filter.blocks.len(), 2);
+        assert!(filter.blocks.iter().any(|b| b.to_string() == "192.168.0.0/16"));
+        assert!(filter.blocks.iter().any(|b| b.to_string() == "10.0.0.0/8"));
+    }
+
+    #[test]
+    fn test_from_settings_valid_mixed_ipv4_ipv6() {
+        let mut settings = BTreeMap::new();
+        settings.insert("addrs".to_string(), "10.0.0.0/8, 2001:db8::/32, ::1/128, 1.1.1.1/32".to_string());
+
+        let filter = CidrRangeFilter::from_settings(settings).expect("Should successfully create filter");
+        
+        assert_eq!(filter.blocks.len(), 4);
+        assert!(filter.blocks.iter().any(|b| b.to_string() == "2001:db8::/32"));
+        assert!(filter.blocks.iter().any(|b| b.to_string() == "::1"));
+        assert!(filter.blocks.iter().any(|b| b.to_string() == "1.1.1.1"));
+    }
+
+    #[test]
+    fn test_from_settings_invalid_cidr() {
+        let mut settings = BTreeMap::new();
+        settings.insert("addrs".to_string(), "192.168.0.0/16, not_a_cidr, 10.0.0.0/8".to_string());
+
+        let result = CidrRangeFilter::from_settings(settings);
+
+        assert!(result.is_err());
+        
+        let err = result.err().unwrap();
+        assert!(format!("{:?}", err).contains("Invalid configuration"));
+    }
+
+    #[test]
+    fn test_from_settings_missing_addrs_key() {
+        let settings = BTreeMap::new(); 
+        
+
+        let result = CidrRangeFilter::from_settings(settings);
+
+        assert!(result.is_err());
+        
+        let err = result.err().unwrap();
+        assert!(format!("{:?}", err).contains("Missing configuration"));
+    }
+    
+}

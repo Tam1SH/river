@@ -1,5 +1,3 @@
-use wasmtime::component::bindgen;
-bindgen!({
-    world: "filter-world",
-    path: "./wit/request.wit",
+wasmtime::component::bindgen!({ 
+    world: "app",
 });
