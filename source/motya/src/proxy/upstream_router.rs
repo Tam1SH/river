@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use futures_util::FutureExt;
 use http::Uri;
 use matchit::{InsertError, Router};
-use pingora::prelude::HttpPeer;
+use pingora::{ErrorType, prelude::HttpPeer};
 use pingora_load_balancing::{Backend, Backends, LoadBalancer, discovery, prelude::RoundRobin, selection::{FNVHash, Random, consistent::KetamaHashing}};
 
 use crate::proxy::filters::chain_resolver::RuntimeChain;
@@ -46,7 +46,7 @@ impl<TUpstream: UpstreamContextTrait> UpstreamRouter<TUpstream> {
         
         let upstream = self
             .get_upstream_by_path(RouteType::Strict(session.uri.path()))
-            .ok_or_else(|| pingora::Error::new_str("Cannot find a peer"))?;
+            .ok_or_else(|| pingora::Error::explain(ErrorType::HTTPStatus(404),"Cannot find a peer"))?;
 
         let key = upstream.get_balancer().selector(ctx, session);
 
@@ -55,13 +55,13 @@ impl<TUpstream: UpstreamContextTrait> UpstreamRouter<TUpstream> {
         // Manually clear the selector buf to avoid accidental leaks
         ctx.selector_buf.clear();
 
-        let backend =
-            backend.ok_or_else(|| pingora::Error::new_str("Unable to determine backend"))?;
+        let backend = 
+            backend.ok_or_else(|| pingora::Error::explain(ErrorType::HTTPStatus(500), "Unable to determine backend"))?;
 
-        backend.ext
+        Ok(backend.ext
             .get::<HttpPeer>()
             .cloned()
-            .ok_or_else(|| pingora::Error::new_str("static response should have responded via upstream_request_filter"))
+            .expect("HttpPeer should exist in backend.ext"))
     }
 
     pub fn get_upstream_by_path(&self, route: RouteType) -> Option<&TUpstream> {

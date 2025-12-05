@@ -1,6 +1,6 @@
 # Installation
 
-Pre-compiled versions of Motya and installation instructions are provided on
+Pre-compiled versions of River and installation instructions are provided on
 the [Releases] page [on GitHub].
 
 [Releases]: https://github.com/memorysafety/river/releases

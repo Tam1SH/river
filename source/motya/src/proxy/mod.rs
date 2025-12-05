@@ -30,32 +30,9 @@ pub struct RateLimiters {
     request_filter_stage_single: Vec<SingleInstance>,
 }
 
-/// The [MotyaProxyService] is intended to capture the behaviors used to extend
-/// the [HttpProxy] functionality by providing a [ProxyHttp] trait implementation.
-///
-/// The [ProxyHttp] trait allows us to provide callback-like control of various stages
-/// of the [request/response lifecycle].
-///
-/// [request/response lifecycle]: https://github.com/cloudflare/pingora/blob/7ce6f4ac1c440756a63b0766f72dbeca25c6fc94/docs/user_guide/phase_chart.md
-
 
 pub type SharedProxyState = Arc<ArcSwap<UpstreamRouter<UpstreamContext>>>;
 
-// impl MotyaProxyService {
-//     pub fn new(initial_state: SharedProxyState) -> Self {
-//         Self {
-//             inner: Arc::new(ArcSwap::from_pointee(initial_state)),
-//         }
-//     }
-
-//     pub fn load(&self) -> Arc<SharedProxyState> {
-//         self.inner.load().clone()
-//     }
-
-//     pub fn update(&self, new_state: SharedProxyState) {
-//         self.inner.store(Arc::new(new_state));
-//     }
-// }
 
 pub struct MotyaProxyService {
     // pub rate_limiters: RateLimiters,
@@ -249,7 +226,7 @@ impl ProxyHttp for MotyaProxyService
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
-    
+        
         let peer = ctx.router.pick_peer(
             &mut ContextInfo { selector_buf: &mut ctx.selector_buf }, 
             &mut SessionInfo { client_addr: session.client_addr(), uri: &session.req_header().uri }

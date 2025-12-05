@@ -7,22 +7,18 @@ use std::net::TcpListener;
 use motya::proxy::filters::chain_resolver::ChainResolver;
 use motya::proxy::motya_proxy_service;
 use motya_config::builder::ConfigLoaderProvider;
-use http::Uri;
 use reqwest::Client;
 use motya_config::builder::ConfigLoader;
-use motya::proxy::filters::generate_registry::{self, load_registry};
+use motya::proxy::filters::generate_registry::load_registry;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 use tempfile::NamedTempFile;
 
-use pingora::{prelude::HttpPeer, server::Server, services::Service};
+use pingora::server::Server;
 use motya_config::{
-    common_types::{connectors::{Connectors, HttpPeerOptions, Upstream, UpstreamConfig}, 
-    definitions::{ConfiguredFilter, DefinitionsTable, FilterChain, Modificator, NamedFilterChain}, 
-    listeners::{ListenerConfig, ListenerKind, Listeners}}, internal::{Config, ProxyConfig}, 
+    common_types::definitions::{ConfiguredFilter, DefinitionsTable, FilterChain}, internal::Config, 
 };
 use fqdn::fqdn;
-use tokio::runtime::Runtime;
 
 const TEST_CONFIG: &str = r#"
     definitions {

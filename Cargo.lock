@@ -4026,7 +4026,9 @@ dependencies = [
 name = "motya-tests"
 version = "0.5.0"
 dependencies = [
+ "arc-swap",
  "fqdn",
+ "futures-util",
  "http",
  "motya",
  "motya-config",

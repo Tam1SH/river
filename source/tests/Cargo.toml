@@ -12,5 +12,7 @@ tempfile = { workspace = true }
 pingora = { workspace = true }
 fqdn = { workspace = true }
 wiremock = { workspace = true }
+arc-swap = { workspace = true }
 motya-config = { path = "../motya-config" }
 motya = { path = "../motya" }
+futures-util = { workspace = true }

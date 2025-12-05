@@ -25,9 +25,9 @@ impl<'a> SystemDataSection<'a> {
     // system { threads-per-service N }
     fn extract_system_data(&self) -> miette::Result<SystemData> {
         // Get the top level system doc
-        dbg!("extract_system_data");
+        
         let Some(sys) = utils::optional_child_doc(self.doc, self.doc, "system") else {
-        dbg!("not found");
+            
             return Ok(SystemData::default());
         };
         let tps = self.extract_threads_per_service(sys)?;
