@@ -6,7 +6,7 @@ use std::io::Write;
 use std::net::TcpListener;
 use motya::proxy::filters::chain_resolver::ChainResolver;
 use motya::proxy::motya_proxy_service;
-use motya_config::builder::ConfigLoaderProvider;
+use motya_config::builder::FileConfigLoaderProvider;
 use reqwest::Client;
 use motya_config::builder::ConfigLoader;
 use motya::proxy::filters::generate_registry::load_registry;

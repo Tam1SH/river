@@ -74,9 +74,9 @@ mod tests {
     use async_trait::async_trait;
 
     use fqdn::FQDN;
-    use pingora_core::Result;
+    use pingora::Result;
     use pingora_proxy::Session;
-    use crate::config::common_types::definitions::{ConfiguredFilter, DefinitionsTable, FilterChain};
+    use motya_config::common_types::definitions::{ConfiguredFilter, DefinitionsTable, FilterChain};
     use crate::proxy::MotyaContext;
     use crate::proxy::filters::chain_resolver::ChainResolver;
     use crate::proxy::filters::generate_registry::load_registry;
@@ -212,7 +212,7 @@ mod tests {
     async fn test_instantiation_failure() {
         let mut reg = FilterRegistry::new();
         reg.register_factory(FQDN::from_str("motya.always_fail").unwrap(), Box::new(|_| {
-            Err(pingora_core::Error::new(pingora_core::ErrorType::Custom("Init failed")))
+            Err(pingora::Error::new(pingora::ErrorType::Custom("Init failed")))
         }));
         
         let mut table = DefinitionsTable::default();

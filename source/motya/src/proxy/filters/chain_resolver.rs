@@ -14,7 +14,7 @@ pub struct RuntimeChain {
     pub res_mods: Vec<Box<dyn ResponseModifyMod>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ChainResolver {
     table: DefinitionsTable,
     registry: Arc<Mutex<FilterRegistry>>,

@@ -14,7 +14,7 @@ mod tests {
     use tokio::sync::Mutex;
     use tokio::time::timeout;
     use tempfile::tempdir;
-    use motya_config::builder::{ConfigLoader, ConfigLoaderProvider};
+    use motya_config::builder::{ConfigLoader, FileConfigLoaderProvider};
     use motya::proxy::filters::{chain_resolver::ChainResolver, registry::FilterRegistry};
     use pingora::server::Server;
     use reqwest::Client;

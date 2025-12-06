@@ -4,16 +4,19 @@ use arc_swap::ArcSwap;
 use async_trait::async_trait;
 
 use futures_util::future::try_join_all;
+use http::Uri;
+use http::uri::{Parts, PathAndQuery};
 use pingora::{server::Server, upstreams::peer::HttpPeer, Result};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
 use motya_config::legacy::{multi::MultiRaterInstance, single::SingleInstance, something::Outcome};
 use motya_config::legacy::request_selector::{ContextInfo, RequestSelector, SessionInfo, null_selector};
 use motya_config::{common_types::{connectors::{Upstream, UpstreamConfig}, listeners::Listeners, rate_limiter::{AllRateConfig, RateLimitingConfig}}, internal::{ProxyConfig, SelectionKind, UpstreamOptions}};
+use uuid::Uuid;
 use crate::proxy::filters::builtin::simple_response::SimpleResponse;
 use crate::{
     proxy::{
-        filters::{chain_resolver::ChainResolver, types::{RequestFilterMod, RequestModifyMod, ResponseModifyMod}}, plugins::module::WasmModule, populate_listeners::populate_listners, upstream_factory::UpstreamFactory, upstream_router::{RouteType, UpstreamContext, UpstreamRouter}
+        filters::{chain_resolver::ChainResolver, types::{RequestFilterMod, RequestModifyMod, ResponseModifyMod}}, plugins::module::WasmModule, populate_listeners::populate_listners, upstream_factory::UpstreamFactory, upstream_router::{UpstreamContext, UpstreamRouter}
     },
 };
 
@@ -163,7 +166,7 @@ impl ProxyHttp for MotyaProxyService
         let router = ctx.router.clone();
         let path = session.req_header().uri.path();
 
-        if let Some(upstream_ctx) = router.get_upstream_by_path(RouteType::Strict(path)) {
+        if let Some(upstream_ctx) = router.get_upstream_by_path(path) {
             
             // let multis = self
             //     .rate_limiters
@@ -227,12 +230,34 @@ impl ProxyHttp for MotyaProxyService
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
         
-        let peer = ctx.router.pick_peer(
-            &mut ContextInfo { selector_buf: &mut ctx.selector_buf }, 
-            &mut SessionInfo { client_addr: session.client_addr(), uri: &session.req_header().uri }
-        )?;
-        
-        Ok(Box::new(peer))
+        static DEFAULT: PathAndQuery = PathAndQuery::from_static("/");
+
+        match ctx.router.pick_peer(
+                &mut ContextInfo { selector_buf: &mut ctx.selector_buf }, 
+                &mut SessionInfo { 
+                    client_addr: session.client_addr(), 
+                    path: session
+                        .req_header()
+                        .uri
+                        .path_and_query()
+                        .unwrap_or(&DEFAULT)
+                }
+            )
+        {
+            Ok(Some(peer)) => {
+                Ok(Box::new(peer))
+            },
+            Ok(None) => {
+                Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)))
+            }
+            Err(err) => {
+                let id = Uuid::new_v4();
+
+                tracing::error!("[{id}] error on pick_peer. err: {err}");
+
+                Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(500)))
+            }
+        }
     }
 
     /// Handle the "upstream request filter" phase, where we can choose to make
@@ -252,7 +277,7 @@ impl ProxyHttp for MotyaProxyService
         let router = ctx.router.clone();
         let path = session.req_header().uri.path();
 
-        if let Some(upstream_ctx) = router.get_upstream_by_path(RouteType::Strict(path)) {
+        if let Some(upstream_ctx) = router.get_upstream_by_path(path) {
             
             for chain in &upstream_ctx.chains {
                 for filter in &chain.req_mods {
@@ -278,7 +303,7 @@ impl ProxyHttp for MotyaProxyService
         let router = ctx.router.clone();
         let path = session.req_header().uri.path();
 
-        if let Some(upstream_ctx) = router.get_upstream_by_path(RouteType::Strict(path)) {
+        if let Some(upstream_ctx) = router.get_upstream_by_path(path) {
             
             for chain in &upstream_ctx.chains {
                 for filter in &chain.res_mods {

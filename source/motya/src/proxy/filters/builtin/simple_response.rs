@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use bytes::Bytes;
-use http::Uri;
+use http::uri::PathAndQuery;
 use motya_config::common_types::simple_response_type::SimpleResponseConfig;
 use pingora::Result;
 use pingora_http::ResponseHeader;
@@ -13,7 +13,7 @@ use crate::proxy::{MotyaContext, filters::types::RequestFilterMod};
 pub struct SimpleResponse {
     pub http_code: http::StatusCode,
     pub response_body: String,
-    pub prefix_path: Uri
+    pub prefix_path: PathAndQuery
 }
 
 #[async_trait]

@@ -1,4 +1,3 @@
-// 1. Макрос-каталог (экспортируем его, чтобы видел core)
 #[macro_export]
 macro_rules! define_builtin_filters {
     ($callback:ident) => {
@@ -9,7 +8,9 @@ macro_rules! define_builtin_filters {
 
             requests: {
                 "motya.request.upsert-header" => RequestUpsertHeader,
-                "motya.request.remove-header" => RequestRemoveHeaderKeyRegex,
+                "motya.request.remove-header" => RequestRemoveHeaderKeyRegex,                
+                "motya.request.strip-prefix" => StripPrefix,
+                "motya.request.rewrite-path" => RewritePathRegex,
             }
 
             responses: {

@@ -1,11 +1,11 @@
 use std::io::Write;
 
-use http::Uri;
+use http::uri::PathAndQuery;
 use pingora::protocols::l4::socket::SocketAddr;
 
 pub struct SessionInfo<'a> {
     pub client_addr: Option<&'a SocketAddr>,
-    pub uri: &'a Uri
+    pub path: &'a PathAndQuery
 }
 
 pub struct ContextInfo<'a> {
@@ -35,7 +35,7 @@ pub fn null_selector<'a>(_ctxt: &'a mut ContextInfo, _ses: &'a SessionInfo) -> &
 ///
 /// Peforms no formatting
 pub fn uri_path_selector<'a>(_ctxt: &'a mut ContextInfo, ses: &'a SessionInfo) -> &'a [u8] {
-    ses.uri.path().as_bytes()
+    ses.path.path().as_bytes()
 }
 
 /// Selector that uses the source address (if available) and the URI of the request as the input key
@@ -49,7 +49,7 @@ pub fn source_addr_and_uri_path_selector<'a>(
         &mut ctxt.selector_buf,
         "{:?}:{}",
         ses.client_addr,
-        ses.uri.path(),
+        ses.path.path(),
     )
     .expect("Formatting into a Vec<u8> should never fail");
 

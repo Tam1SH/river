@@ -3,7 +3,7 @@ use std::{
     str::FromStr, sync::atomic::{AtomicUsize, Ordering},
 };
 
-use http::{StatusCode, Uri};
+use http::{StatusCode, Uri, uri::PathAndQuery};
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use miette::SourceSpan;
 use pingora::{prelude::HttpPeer, protocols::{ALPN, l4::socket::SocketAddr}};
@@ -11,8 +11,7 @@ use pingora::{prelude::HttpPeer, protocols::{ALPN, l4::socket::SocketAddr}};
 use crate::{
     common_types::{
         bad::{Bad, OptExtParse}, connectors::{
-            Connectors, ConnectorsLeaf, HttpPeerOptions, Upstream,
-            UpstreamConfig,
+            Connectors, ConnectorsLeaf, HttpPeerOptions, RouteMatcher, Upstream, UpstreamConfig
         }, definitions::{DefinitionsTable, FilterChain, Modificator, NamedFilterChain}, section_parser::SectionParser, simple_response_type::SimpleResponseConfig
     },
     internal::{DiscoveryKind, HealthCheckKind, SelectionKind, UpstreamOptions},
@@ -61,10 +60,21 @@ impl<'a> ConnectorsSection<'a> {
         
         let conn_node = utils::required_child_doc(self.doc, node, "connectors")?;
 
-        self.process_nodes_recursive(conn_node, anonymous_chains, "/".parse().unwrap())
+        self.process_nodes_recursive(
+            conn_node, 
+            anonymous_chains, 
+            "/".parse().unwrap(), 
+            RouteMatcher::Prefix
+        )
     }
 
-    fn process_nodes_recursive(&self, parent_node: &KdlDocument, anonymous_chains: &mut HashMap<String, FilterChain>, base_path: Uri) -> miette::Result<Vec<ConnectorsLeaf>> {
+    fn process_nodes_recursive(
+        &self, 
+        parent_node: &KdlDocument, 
+        anonymous_chains: &mut HashMap<String, FilterChain>, 
+        base_path: PathAndQuery,
+        current_matcher: RouteMatcher
+    ) -> miette::Result<Vec<ConnectorsLeaf>> {
         let nodes = utils::data_nodes(self.doc, parent_node)?;
         let mut result = Vec::new();
 
@@ -86,8 +96,8 @@ impl<'a> ConnectorsSection<'a> {
                     exclusive_handler = Some((name, node.span()));
 
                     match name {
-                        "return" => self.extract_static_response(node, args, base_path.clone())?,
-                        "proxy" => self.extract_connector(node, args, base_path.clone())?,
+                        "return" => self.extract_static_response(node, args, base_path.clone(), current_matcher)?,
+                        "proxy" => self.extract_connector(node, args, base_path.clone(), current_matcher)?,
                         _ => unreachable!(),
                     }
                 },
@@ -100,7 +110,7 @@ impl<'a> ConnectorsSection<'a> {
                     self.extract_load_balance(node)?
                 },
 
-                "section" => self.extract_section(node, args, anonymous_chains, base_path.clone())?,
+                "section" => self.extract_section(node, args, anonymous_chains, base_path.clone(), current_matcher)?,
                 "use-chain" => self.extract_chain_usage(node, args, anonymous_chains, base_path.clone())?,
                 
                 unknown => return Err(Bad::docspan(format!("Unknown directive: {unknown}"), self.doc, &node.span()).into())
@@ -117,7 +127,7 @@ impl<'a> ConnectorsSection<'a> {
         node: &KdlNode,
         args: &[KdlEntry],
         anonymous_chains: &mut HashMap<String, FilterChain>,
-        path: Uri
+        path: PathAndQuery
     ) -> miette::Result<ConnectorsLeaf> {
         
         //named use-chain
@@ -171,37 +181,70 @@ impl<'a> ConnectorsSection<'a> {
         node: &KdlNode, 
         args: &[KdlEntry], 
         anonymous_chains: &mut HashMap<String, FilterChain>,
-        base_path: Uri
+        base_path: PathAndQuery,
+        parent_matcher: RouteMatcher
     ) -> miette::Result<ConnectorsLeaf> {
         
-        let arg = args.first()
+        
+        let path_arg = args.iter().find(|entry| entry.name().is_none())
             .ok_or_else(|| Bad::docspan("Section node requires a path argument", self.doc, &node.span()))?;
 
-        let path_segment = arg
+        let path_segment = path_arg
             .value()
             .as_string()
-            .ok_or_else(|| Bad::docspan("Section path argument must be a string", self.doc, &arg.span()))?;
+            .ok_or_else(|| Bad::docspan("Section path argument must be a string", self.doc, &path_arg.span()))?;
 
-        let full_path = if base_path.path().is_empty() {
-            path_segment.to_string()
+            
+        let mode_arg = args.iter().find(|entry| entry.name().map(|n| n.value()) == Some("as"));
+        
+        let next_matcher = if let Some(entry) = mode_arg {
+             match entry.value().as_string() {
+                Some("prefix") => RouteMatcher::Prefix,
+                Some("exact") => RouteMatcher::Exact,
+                Some(other) => return Err(Bad::docspan(format!("Unknown routing mode '{other}'. Use 'prefix' or 'exact'"), self.doc, &entry.span()).into()),
+                None => return Err(Bad::docspan("Routing mode must be a string", self.doc, &entry.span()).into()),
+             }
         } else {
-            format!("{}/{}", base_path.path().trim_end_matches('/'), path_segment.trim_start_matches('/'))
+            parent_matcher
         };
 
         let children_doc = node.children()
             .ok_or_else(|| Bad::docspan("Section node must have children", self.doc, &node.span()))?;
 
-        let path = full_path.parse()
-            .map_err(|err| Bad::docspan(format!("Bad path: {full_path}, error: {err}"), self.doc, &arg.span()))?;
+        if next_matcher == RouteMatcher::Exact {
+            for child in children_doc.nodes() {
+                if child.name().value() == "section" {
+                    return Err(Bad::docspan(
+                        "A section with 'exact' routing mode cannot contain nested sections.",
+                        self.doc,
+                        &child.span() 
+                    ).into());
+                }
+            }
+        }
+        
+        let full_path = if base_path.path().is_empty() || base_path.path() == "/" {
+            if path_segment.starts_with('/') {
+                path_segment.to_string()
+            } else {
+                format!("/{}", path_segment)
+            }
+        } else {
+            format!("{}/{}", base_path.path().trim_end_matches('/'), path_segment.trim_start_matches('/'))
+        };
 
-        Ok(ConnectorsLeaf::Section(self.process_nodes_recursive(children_doc, anonymous_chains, path)?))
+        let path = full_path.parse()
+            .map_err(|err| Bad::docspan(format!("Bad path: {full_path}, error: {err}"), self.doc, &path_arg.span()))?;
+
+        Ok(ConnectorsLeaf::Section(self.process_nodes_recursive(children_doc, anonymous_chains, path, next_matcher)?))
     }
 
     fn extract_static_response(
         &self,
         node: &KdlNode,
         args: &[KdlEntry],
-        base_path: Uri
+        base_path: PathAndQuery,
+        parent_matcher: RouteMatcher
     ) -> miette::Result<ConnectorsLeaf> {
 
         let args = utils::str_str_args(self.doc, args)
@@ -227,7 +270,8 @@ impl<'a> ConnectorsSection<'a> {
         &self,
         node: &KdlNode,
         args: &[KdlEntry],
-        base_path: Uri
+        base_path: PathAndQuery,
+        parent_matcher: RouteMatcher
     ) -> miette::Result<ConnectorsLeaf> {
 
         let named_args = &args[1..];  
@@ -285,7 +329,8 @@ impl<'a> ConnectorsSection<'a> {
                 HttpPeerOptions { 
                     peer, 
                     prefix_path: base_path, 
-                    target_path: uri.path().parse::<Uri>().unwrap_or(Uri::from_static("/")) 
+                    target_path: uri.path().parse::<PathAndQuery>().unwrap_or(PathAndQuery::from_static("/")),
+                    matcher: parent_matcher
                 }
             )
         ))
@@ -486,6 +531,42 @@ mod tests {
 
         let conn_parser = ConnectorsSection::new(&doc, &table);
         conn_parser.parse_node(&doc)
+    }
+
+
+    const INVALID_STRICT_NESTING: &str = r#"
+    connectors {
+        section "/api" as="exact" {
+            // This should fail because parent is exact
+            section "/v1" {
+                return code="200" response="fail"
+            }
+        }
+    }
+    "#;
+
+    #[test]
+    fn test_strict_section_cannot_have_children() {
+        let result = parse_config(INVALID_STRICT_NESTING);
+        
+        let err_msg = result.err().unwrap().help().unwrap().to_string();
+        
+        crate::assert_err_contains!(err_msg, "A section with 'exact' routing mode cannot contain nested sections");
+    }
+
+    const VALID_STRICT_CONFIG: &str = r#"
+    connectors {
+        section "/api" as="exact" {
+            // Non-section children are allowed
+            return code="200" response="OK"
+        }
+    }
+    "#;
+
+    #[test]
+    fn test_strict_section_allowed_directives() {
+        let result = parse_config(VALID_STRICT_CONFIG);
+        assert!(result.is_ok());
     }
 
     const ARGS_PARSING_TEST: &str = r#"

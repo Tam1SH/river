@@ -2,7 +2,7 @@ use std::hash::{Hash, Hasher};
 use std::{collections::HashMap, hash::DefaultHasher};
 use std::fmt::Debug;
 
-use http::Uri;
+use http::uri::PathAndQuery;
 use pingora::{prelude::HttpPeer, upstreams::peer::Proxy, protocols::l4::socket::SocketAddr};
 
 use crate::common_types::simple_response_type::SimpleResponseConfig;
@@ -11,12 +11,20 @@ use crate::{
     internal::UpstreamOptions,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RouteMatcher {
+    #[default]
+    Prefix,
+    Exact,
+}
+
 #[derive(Debug, Clone)]
 pub struct HttpPeerOptions {
     //TODO: do separate type
     pub peer: HttpPeer,
-    pub prefix_path: Uri,
-    pub target_path: Uri
+    pub prefix_path: PathAndQuery,
+    pub target_path: PathAndQuery,
+    pub matcher: RouteMatcher
 }
 
 impl PartialEq for HttpPeerOptions {

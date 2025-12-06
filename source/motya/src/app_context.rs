@@ -1,10 +1,10 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use clap::{CommandFactory, FromArgMatches};
-use motya_config::common_types::definitions::DefinitionsTable;
+use motya_config::{cli::{builder::{CliConfigBuilder, RouteAction, SyntheticRoute}, cli::{Cli, Commands}}, common_types::definitions::DefinitionsTable};
 use pingora::{server::Server, services::Service};
 use tokio::sync::Mutex;
-use motya_config::{builder::{ConfigLoader, ConfigLoaderProvider}, cli::Cli, internal::Config};
+use motya_config::{builder::{ConfigLoader, FileConfigLoaderProvider}, internal::Config};
 use crate::{
     files::motya_file_server, 
     proxy::{filters::{chain_resolver::ChainResolver, generate_registry}, 
@@ -21,18 +21,23 @@ pub struct AppContext {
     server: Server,
 }
 
-fn resolve_config_path(cli: &Cli) -> String {
+fn resolve_config_path(cli: &Cli) -> PathBuf {
     
-    "/etc/motya/entry.kdl".to_string() 
+    if let Some(path) = &cli.config_entry {
+        return path.clone();
+    }
+
+    if let Ok(env_path) = std::env::var("MOTYA_CONFIG_PATH") {
+        return env_path.into();
+    }
+
+    "/etc/motya/entry.kdl".into() 
 }
 
-impl AppContext {
-    pub async fn bootstrap() -> miette::Result<AppContext> {
 
-        // 1. CLI args
-        let command = Cli::command().before_help(BANNER).get_matches();
-        let cli_args = Cli::from_arg_matches(&command).expect("Failed to parse args");
-        
+impl AppContext {
+    pub async fn bootstrap(cli_args: Cli) -> miette::Result<AppContext> {
+
         let config_path = resolve_config_path(&cli_args);
 
         tracing::info!(config = ?cli_args, "CLI config parsed");
@@ -56,12 +61,12 @@ impl AppContext {
         let watcher = ConfigWatcher::new(
             config.clone(), 
             global_definitions,
-            config_path.into(),
+            config_path,
             UpstreamFactory::new(resolver.clone()),
             ConfigLoader::default()
         );
 
-        // 7. Prepare Server instance (Pingora)
+        // 6. Prepare Server instance (Pingora)
         let server = Server::new_with_opt_and_conf(config.pingora_opt(), config.pingora_server_conf());
 
         Ok(AppContext {
@@ -104,19 +109,50 @@ impl AppContext {
 
     pub fn ready(self) -> (Server, ConfigWatcher) { (self.server, self.watcher) }
 
-    async fn load_config(cli_args: &Cli, config_path: &str, global_definitions: &mut DefinitionsTable) -> miette::Result<Config> {
-        let loader = ConfigLoader::default();
-        
-        tracing::info!("Loading config from: {}", config_path);
-
-        let mut config = loader.load_entry_point(Some(config_path.into()), global_definitions).await?
-            .inspect(|_| tracing::info!("Applying config"))
-            .unwrap_or_else(|| {
-                tracing::warn!("No configuration file provided, using default");
-                Config::default()
-            });
-
+    async fn load_config(cli_args: &Cli, config_path: &PathBuf, global_definitions: &mut DefinitionsTable) -> miette::Result<Config> {
+        let mut config = match &cli_args.command {
             
+            Some(Commands::Hello { port, text }) => {
+                CliConfigBuilder::build_hello(*port, text.clone())?
+            },
+
+            Some(Commands::Serve { port, map }) => {
+                let mut routes = Vec::new();
+                
+                for mapping in map {
+                    
+                    let (path, target) = mapping.split_once('=')
+                        .ok_or_else(|| miette::miette!("Invalid map format. Expected 'path=target', got '{}'", mapping))?;
+                    
+                    let action = if target.starts_with("http://") || target.starts_with("https://") {
+                        RouteAction::Proxy(target.to_string())
+                    } else {
+                        RouteAction::Static(target.to_string())
+                    };
+
+                    routes.push(SyntheticRoute {
+                        path: path.to_string(),
+                        action
+                    });
+                }
+
+                tracing::info!("🚀 Starting in SERVE mode on port {} with {} routes", port, routes.len());
+                
+                CliConfigBuilder::build_routes(*port, routes)?
+            },
+            None => {
+                let loader = ConfigLoader::default();
+                loader.load_entry_point(Some(config_path.into()), global_definitions).await?
+                    .inspect(|_| tracing::info!("Applying config"))
+                    .unwrap_or_else(|| {
+                        tracing::warn!("No configuration file provided, using default");
+                        Config::default()
+                    })
+            }
+        };
+        
+        tracing::info!("Loading config from: {:?}", config_path);
+
         // Apply CLI overrides & Validate
         apply_cli(&mut config, cli_args);
         tracing::debug!(?config, "Full configuration");
@@ -131,17 +167,6 @@ impl AppContext {
 
 
 
-const BANNER: &str = r#"
-   __  __       _              
-  |  \/  | ___ | |_ _   _ __ _ 
-  | |\/| |/ _ \| __| | | / _` |
-  | |  | | (_) | |_| |_| \__,_|
-  |_|  |_|\___/ \__|\__, |_____|
-                    |___/       
-      /\_/\  
-     ( o.o )  Motya Proxy v0.5.0
-      > ^ <   Watching you...
-"#;
 
 
 fn apply_cli(conf: &mut Config, cli: &Cli) {
@@ -154,6 +179,7 @@ fn apply_cli(conf: &mut Config, cli: &Cli) {
         upgrade,
         pidfile,
         upgrade_socket,
+        command: _
     } = cli;
 
     conf.validate_configs |= validate_configs;

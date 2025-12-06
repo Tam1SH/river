@@ -110,7 +110,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::config::common_types::definitions::ConfiguredFilter;
+    use motya_config::common_types::definitions::ConfiguredFilter;
     use fqdn::fqdn;
     use super::*;
 
@@ -123,10 +123,8 @@ mod tests {
         ConfiguredFilter { name, args: map }
     }
 
-    impl From<Vec<ConfiguredFilter>> for FilterChain {
-        fn from(value: Vec<ConfiguredFilter>) -> Self {
-            Self { filters: value }
-        }
+    fn chain(filters: Vec<ConfiguredFilter>) -> FilterChain {
+        FilterChain { filters }
     }
 
     #[test]
@@ -134,29 +132,36 @@ mod tests {
         let mut old = DefinitionsTable::default();
         let mut new = DefinitionsTable::default();
 
-        
-        old.insert_chain("static", vec![cfg_filter(fqdn!("rate_limit"), &[("rate", "10")])].into());
-        
-        old.insert_chain("api", vec![
+            
+        old.insert_chain("static", chain(vec![
+            cfg_filter(fqdn!("rate_limit"), &[("rate", "10")])
+        ]));
+    
+        old.insert_chain("api", chain(vec![
             cfg_filter(fqdn!("auth"), &[]),
             cfg_filter(fqdn!("logger"), &[("verbose", "false")]),
-        ].into());
+        ]));
 
-        old.insert_chain("legacy", vec![cfg_filter(fqdn!("old"), &[])].into());
+        old.insert_chain("legacy", chain(vec![
+            cfg_filter(fqdn!("old"), &[])
+        ]));
 
 
-        new.insert_chain("static", vec![
+        new.insert_chain("static", chain(vec![
             cfg_filter(fqdn!("rate_limit"), &[("rate", "10")])
-        ].into());
+        ]));
 
         
-        new.insert_chain("api", vec![
+        new.insert_chain("api", chain(vec![
             cfg_filter(fqdn!("auth"), &[]),
             cfg_filter(fqdn!("logger"), &[("verbose", "true")]), 
-        ].into());
+        ]));
 
-        new.insert_chain("new", vec![cfg_filter(fqdn!("cors"), &[])].into());
+        new.insert_chain("new", chain(vec![
+            cfg_filter(fqdn!("cors"), &[])
+        ]));
         
+    
         // act.
         let diff = DefinitionsTableDiff::diff(&old, &new);
 

@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::{Arc, mpsc}, thread};
 
-use http::Uri;
+use http::{Uri, uri::PathAndQuery};
 use motya::proxy::{filters::{chain_resolver::ChainResolver, generate_registry::load_registry}, motya_proxy_service};
 use pingora::{prelude::HttpPeer, server::Server};
 use wiremock::{Mock, MockServer, ResponseTemplate, matchers::{header, method}};
@@ -54,8 +54,9 @@ pub async fn setup_check_cidr() -> thread::JoinHandle<()> {
                 })],
                 upstream: Upstream::Service(HttpPeerOptions {
                     peer: HttpPeer::new(mock_server.address().to_string(), false, "".to_string()),
-                    prefix_path: Uri::from_static("/"),
-                    target_path: Uri::from_static("/"),
+                    prefix_path: PathAndQuery::from_static("/"),
+                    target_path: PathAndQuery::from_static("/"),
+                    matcher: Default::default()
                 }),
             }],
             anonymous_chains: Default::default(),
@@ -141,8 +142,9 @@ pub async fn setup_check_cidr_accept() -> thread::JoinHandle<()> {
                 })],
                 upstream: Upstream::Service(HttpPeerOptions {
                     peer: HttpPeer::new(mock_server.address().to_string(), false, "".to_string()),
-                    prefix_path: Uri::from_static("/"),
-                    target_path: Uri::from_static("/"),
+                    prefix_path: PathAndQuery::from_static("/"),
+                    target_path: PathAndQuery::from_static("/"),
+                    matcher: Default::default()
                 }),
             }],
             anonymous_chains: Default::default(),

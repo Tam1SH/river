@@ -50,7 +50,7 @@ use crate::common_types::{
 ///        and registered into the global definitions table with generated names.
 
 #[async_trait]
-pub trait ConfigLoaderProvider {
+pub trait FileConfigLoaderProvider {
     async fn load_entry_point(mut self, path: Option<PathBuf>, global_definitions: &mut DefinitionsTable) -> Result<Option<Config>>;
 }
 
@@ -61,7 +61,7 @@ pub struct ConfigLoader {
 }
 
 #[async_trait]
-impl ConfigLoaderProvider for ConfigLoader {
+impl FileConfigLoaderProvider for ConfigLoader {
     async fn load_entry_point(mut self, path: Option<PathBuf>, global_definitions: &mut DefinitionsTable) -> Result<Option<Config>> {
         if let Some(path) = path {
             let root_path = std::fs::canonicalize(path)
@@ -479,7 +479,7 @@ mod tests {
 
             
         let loader = ConfigLoader::default();
-        
+
         let mut def_table = DefinitionsTable::new_with_global();
 
         

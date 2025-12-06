@@ -8,18 +8,20 @@ use wiremock::{Mock, ResponseTemplate, matchers::{any, header, method}};
 use std::collections::HashMap;
 
 
-use http::Uri;
+use http::{Uri, uri::PathAndQuery};
 use pingora::{prelude::HttpPeer, server::Server};
 use wiremock::MockServer;
-use motya::{
-    config::{
-        common_types::{
-            connectors::{Connectors, HttpPeerOptions, Upstream, UpstreamConfig},
-            definitions::{ConfiguredFilter, DefinitionsTable, FilterChain, Modificator, NamedFilterChain},
-            listeners::{ListenerConfig, ListenerKind, Listeners},
-        },
-        internal::{Config, ProxyConfig},
+use motya_config::{
+    common_types::{
+        connectors::{Connectors, HttpPeerOptions, Upstream, UpstreamConfig},
+        definitions::{ConfiguredFilter, DefinitionsTable, FilterChain, Modificator, NamedFilterChain},
+        listeners::{ListenerConfig, ListenerKind, Listeners},
     },
+    internal::{Config, ProxyConfig},
+};
+
+use motya::{
+
     proxy::{
         filters::{chain_resolver::ChainResolver, generate_registry::load_registry},
         motya_proxy_service,
@@ -81,8 +83,10 @@ async fn setup_filters() {
                 upstream: Upstream::Service(HttpPeerOptions {
                     peer: HttpPeer::new(mock_server.address().to_string(), false, "".to_string()),
                     
-                    prefix_path: Uri::from_static("/test"),
-                    target_path: Uri::from_static("/"),
+                    prefix_path: PathAndQuery::from_static("/test"),
+                    target_path: PathAndQuery::from_static("/"),
+
+                    matcher: Default::default()
                 }),
             }],
             anonymous_chains: Default::default(),

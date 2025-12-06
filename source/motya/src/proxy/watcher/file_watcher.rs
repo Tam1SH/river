@@ -7,10 +7,10 @@ use notify::{Event, RecursiveMode, Watcher};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::{proxy::{SharedProxyState, filters::{generate_registry, registry::FilterRegistry}, upstream_factory::UpstreamFactory, upstream_router::UpstreamRouter}};
-use motya_config::{builder::{ConfigLoader, ConfigLoaderProvider}, common_types::definitions::DefinitionsTable, internal::{Config, ProxyConfig}};
+use motya_config::{builder::{ConfigLoader, FileConfigLoaderProvider}, common_types::definitions::DefinitionsTable, internal::{Config, ProxyConfig}};
 
 
-pub struct ConfigWatcher<TConfigLoader: ConfigLoaderProvider + Clone = ConfigLoader> {
+pub struct ConfigWatcher<TConfigLoader: FileConfigLoaderProvider + Clone = ConfigLoader> {
     config: Config,
     table: DefinitionsTable,
     active_proxies: HashMap<String, SharedProxyState>,
@@ -19,7 +19,7 @@ pub struct ConfigWatcher<TConfigLoader: ConfigLoaderProvider + Clone = ConfigLoa
     config_loader: TConfigLoader
 }
 
-impl<T: ConfigLoaderProvider + Clone> ConfigWatcher<T> {
+impl<T: FileConfigLoaderProvider + Clone> ConfigWatcher<T> {
     pub fn new(
         config: Config, 
         table: DefinitionsTable, 
@@ -129,12 +129,15 @@ impl<T: ConfigLoaderProvider + Clone> ConfigWatcher<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{config::{common_types::{connectors::{Connectors, Upstream, UpstreamConfig}, listeners::Listeners, rate_limiter::RateLimitingConfig}, internal::SimpleResponse}, proxy::{RateLimiters, filters::chain_resolver::ChainResolver, upstream_router::RouteType}};
+    use crate::proxy::{RateLimiters, filters::chain_resolver::ChainResolver};
+    use motya_config::common_types::{
+            connectors::{Connectors, RouteMatcher, Upstream, UpstreamConfig}, 
+        listeners::Listeners, rate_limiter::RateLimitingConfig, simple_response_type::SimpleResponseConfig};
 
     use super::*;
     use std::sync::Arc;
     use async_trait::async_trait;
-    use http::{StatusCode, Uri};
+    use http::{StatusCode, Uri, uri::PathAndQuery};
     use miette::Result;
     use tempfile::env::temp_dir;
     use tokio::{runtime::Handle, sync::Mutex, task::block_in_place};
@@ -153,7 +156,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl ConfigLoaderProvider for MockConfigLoader {
+    impl FileConfigLoaderProvider for MockConfigLoader {
         async fn load_entry_point(
             mut self, 
             _path: Option<PathBuf>, 
@@ -176,10 +179,10 @@ mod tests {
                     upstreams: vec![UpstreamConfig {
                         chains: vec![],
                         lb_options: Default::default(),
-                        upstream: Upstream::Static(SimpleResponse {
+                        upstream: Upstream::Static(SimpleResponseConfig {
                             http_code: StatusCode::OK, 
                             response_body: "ver 1".to_string(), 
-                            prefix_path: Uri::from_static("/")
+                            prefix_path: PathAndQuery::from_static("/")
                         })
                     }] 
                 },
@@ -216,7 +219,7 @@ mod tests {
         watcher.reload().await.expect("Reload failed");
 
         let router = tracked_router.load();
-        let first_version = router.get_upstream_by_path(RouteType::Strict("/")).unwrap();
+        let first_version = router.get_upstream_by_path("/").unwrap();
         let Upstream::Static(response) = &first_version.upstream else { unreachable!() };
 
         assert_eq!(response.response_body, "ver 1");
@@ -224,10 +227,10 @@ mod tests {
         
         let mut rewrited_config = mock_loader.config_to_return.lock().await;
         let not_empty_config = rewrited_config.as_mut().unwrap();
-        not_empty_config.basic_proxies[0].connectors.upstreams[0].upstream = Upstream::Static(SimpleResponse {
+        not_empty_config.basic_proxies[0].connectors.upstreams[0].upstream = Upstream::Static(SimpleResponseConfig {
             http_code: StatusCode::OK, 
             response_body: "ver 2".to_string(), 
-            prefix_path: Uri::from_static("/")
+            prefix_path: PathAndQuery::from_static("/")
         });
 
         drop(rewrited_config);
@@ -236,7 +239,7 @@ mod tests {
         watcher.reload().await.expect("Reload failed");
     
         let router = tracked_router.load();
-        let second_version = router.get_upstream_by_path(RouteType::Strict("/")).unwrap();
+        let second_version = router.get_upstream_by_path("/").unwrap();
         let Upstream::Static(response) = &second_version.upstream else { unreachable!() };
 
         assert_eq!(response.response_body, "ver 2");

@@ -249,7 +249,8 @@ mod tests {
     use wasmtime::Engine;
     use wasmtime_wasi::{ResourceTable, WasiCtx, WasiCtxView};
 
-    use crate::{config::common_types::definitions::PluginSource, proxy::plugins::store::WasmPluginStore};
+    use motya_config::common_types::definitions::PluginSource;
+    use crate::proxy::plugins::store::WasmPluginStore;
 
     #[derive(Default)]
     pub struct MockState {

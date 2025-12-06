@@ -158,7 +158,7 @@ impl IoView for ModuleState {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::common_types::definitions::PluginDefinition;
+    use motya_config::common_types::definitions::PluginDefinition;
 
     use super::*;
     use std::collections::{HashMap, HashSet};
