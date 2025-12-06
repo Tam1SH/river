@@ -148,13 +148,13 @@ mod tests {
             command: Some(Commands::Serve {
                 port: proxy_port,
                 map: vec![
-                    format!("/users={}", service_users.uri()),
-                    format!("/orders={}", service_orders.uri()),
+                    format!("prefix:/users={}", service_users.uri()),
+                    format!("prefix:/orders={}", service_orders.uri()),
                     "/health=OK".to_string(),
                 ],
             }),
         };
-        dbg!(&cli);
+        
         let mut app_ctx = AppContext::bootstrap(cli).await.expect("Bootstrap failed");
         let services = app_ctx.build_services().await.expect("Build services failed");
         let (mut server, _watcher) = app_ctx.ready();

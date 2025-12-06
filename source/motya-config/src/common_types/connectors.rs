@@ -12,10 +12,10 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum RouteMatcher {
+pub enum RouteMatcher {    
     #[default]
-    Prefix,
     Exact,
+    Prefix
 }
 
 #[derive(Debug, Clone)]

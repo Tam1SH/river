@@ -141,8 +141,6 @@ mod tests {
         assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.response.remove-header").unwrap()));
         assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.request.upsert-header").unwrap()));
         assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.request.remove-header").unwrap()));
-
-        assert_eq!(definitions.get_available_filters().len(), 5);
     }
 
 

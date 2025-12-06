@@ -218,7 +218,7 @@ pub mod tests {
         assert_eq!(elem.get_prefix_path(), "/api");
         
         let elem = router.get_upstream_by_path("/api").unwrap();
-        assert_eq!(elem.get_prefix_path(), "/api"); 
+        assert_eq!(elem.get_prefix_path(), "/"); 
 
         // --- Test Fallback (Root) ---
         let elem = router.get_upstream_by_path("/random/stuff").unwrap();

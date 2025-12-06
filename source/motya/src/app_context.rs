@@ -1,7 +1,7 @@
 use std::{path::PathBuf, sync::Arc};
 
 use clap::{CommandFactory, FromArgMatches};
-use motya_config::{cli::{builder::{CliConfigBuilder, RouteAction, SyntheticRoute}, cli::{Cli, Commands}}, common_types::definitions::DefinitionsTable};
+use motya_config::{cli::{builder::{CliConfigBuilder, RouteAction, RouteMatch, SyntheticRoute}, cli::{Cli, Commands}}, common_types::definitions::DefinitionsTable};
 use pingora::{server::Server, services::Service};
 use tokio::sync::Mutex;
 use motya_config::{builder::{ConfigLoader, FileConfigLoaderProvider}, internal::Config};
@@ -121,19 +121,10 @@ impl AppContext {
                 
                 for mapping in map {
                     
-                    let (path, target) = mapping.split_once('=')
-                        .ok_or_else(|| miette::miette!("Invalid map format. Expected 'path=target', got '{}'", mapping))?;
-                    
-                    let action = if target.starts_with("http://") || target.starts_with("https://") {
-                        RouteAction::Proxy(target.to_string())
-                    } else {
-                        RouteAction::Static(target.to_string())
-                    };
+                    let syntetic_route = CliConfigBuilder::parse_map_string(mapping)
+                        .map_err(|err| miette::miette!("{err}"))?;
 
-                    routes.push(SyntheticRoute {
-                        path: path.to_string(),
-                        action
-                    });
+                    routes.push(syntetic_route);
                 }
 
                 tracing::info!("🚀 Starting in SERVE mode on port {} with {} routes", port, routes.len());
@@ -212,3 +203,4 @@ fn apply_cli(conf: &mut Config, cli: &Cli) {
         conf.threads_per_service = *tps;
     }
 }
+

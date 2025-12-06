@@ -64,7 +64,7 @@ impl<'a> ConnectorsSection<'a> {
             conn_node, 
             anonymous_chains, 
             "/".parse().unwrap(), 
-            RouteMatcher::Prefix
+            RouteMatcher::Exact
         )
     }
 
@@ -96,7 +96,7 @@ impl<'a> ConnectorsSection<'a> {
                     exclusive_handler = Some((name, node.span()));
 
                     match name {
-                        "return" => self.extract_static_response(node, args, base_path.clone(), current_matcher)?,
+                        "return" => self.extract_static_response(node, args, base_path.clone())?,
                         "proxy" => self.extract_connector(node, args, base_path.clone(), current_matcher)?,
                         _ => unreachable!(),
                     }
@@ -243,8 +243,7 @@ impl<'a> ConnectorsSection<'a> {
         &self,
         node: &KdlNode,
         args: &[KdlEntry],
-        base_path: PathAndQuery,
-        parent_matcher: RouteMatcher
+        base_path: PathAndQuery
     ) -> miette::Result<ConnectorsLeaf> {
 
         let args = utils::str_str_args(self.doc, args)

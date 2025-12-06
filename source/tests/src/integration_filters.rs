@@ -78,19 +78,6 @@ async fn start_server_from_config_path(
     let mut definitions_table = DefinitionsTable::default();
     let registry = load_registry(&mut definitions_table);
 
-    let filter_a = FilterChain { filters: vec![ConfiguredFilter {
-        name: fqdn!("motya.request.upsert-header"),
-        args: HashMap::from([("key".to_string(), "X-Service".to_string()), ("value".to_string(), "A".to_string())]),
-    }]};
-    definitions_table.insert_chain("filter-a", filter_a.clone());
-
-    let filter_b = FilterChain { filters: vec![ConfiguredFilter {
-        name: fqdn!("motya.request.upsert-header"),
-        args: HashMap::from([("key".to_string(), "X-Service".to_string()), ("value".to_string(), "B".to_string())]),
-    }]};
-    definitions_table.insert_chain("filter-b", filter_b.clone());
-
-    let resolver = ChainResolver::new(definitions_table.clone(), Arc::new(registry.into())).await.unwrap();
     let conf = Config::default(); 
     
     let loader = ConfigLoader::default();
@@ -99,7 +86,9 @@ async fn start_server_from_config_path(
     let config = loader.load_entry_point(Some(config_path.to_path_buf()), &mut definitions_table).await
         .unwrap()
         .unwrap();
-
+    
+    let resolver = ChainResolver::new(definitions_table.clone(), Arc::new(registry.into())).await.unwrap();
+    
     let proxy = config.basic_proxies.first().cloned().unwrap();
 
     let mut app_server = Server::new_with_opt_and_conf(conf.pingora_opt(), conf.pingora_server_conf());
