@@ -1,22 +1,24 @@
-use std::{
-    collections::BTreeMap,
-    num::NonZeroUsize,
-};
+use std::{collections::BTreeMap, num::NonZeroUsize};
 
 use kdl::{KdlDocument, KdlNode, KdlValue};
 
 use crate::{
     common_types::{
-        bad::Bad, rate_limiter::{
-            AllRateConfig, MultiRaterConfig, RateLimitingConfig,
-        }, section_parser::SectionParser
+        bad::Bad,
+        rate_limiter::{AllRateConfig, MultiRaterConfig, RateLimitingConfig},
+        section_parser::SectionParser,
     },
-    kdl::utils, legacy::{multi::MultiRequestKeyKind, single::{SingleInstanceConfig, SingleRequestKeyKind}, something::RegexShim}
+    kdl::utils,
+    legacy::{
+        multi::MultiRequestKeyKind,
+        single::{SingleInstanceConfig, SingleRequestKeyKind},
+        something::RegexShim,
+    },
 };
-    // proxy::rate_limiting::{
-    //     RegexShim, multi::MultiRequestKeyKind, single::{SingleInstanceConfig, SingleRequestKeyKind}
-    // },
-    
+// proxy::rate_limiting::{
+//     RegexShim, multi::MultiRequestKeyKind, single::{SingleInstanceConfig, SingleRequestKeyKind}
+// },
+
 pub struct RateLimitSection<'a> {
     doc: &'a KdlDocument,
     threads_per_service: usize,
@@ -24,7 +26,6 @@ pub struct RateLimitSection<'a> {
 
 impl SectionParser<KdlDocument, RateLimitingConfig> for RateLimitSection<'_> {
     fn parse_node(&self, node: &KdlDocument) -> miette::Result<RateLimitingConfig> {
-
         let mut rl = RateLimitingConfig::default();
         if let Some(rl_node) = utils::optional_child_doc(self.doc, node, "rate-limiting") {
             let nodes = utils::data_nodes(self.doc, rl_node)?;
@@ -35,19 +36,24 @@ impl SectionParser<KdlDocument, RateLimitingConfig> for RateLimitSection<'_> {
                         .iter()
                         .map(|(k, v)| (*k, v.value()))
                         .collect::<BTreeMap<&str, &KdlValue>>();
-                    rl.rules
-                        .push(self.make_rate_limiter(self.threads_per_service, node, valslice)?);
+                    rl.rules.push(self.make_rate_limiter(
+                        self.threads_per_service,
+                        node,
+                        valslice,
+                    )?);
                 } else {
-                    return Err(
-                        Bad::docspan(format!("Unknown name: '{name}'"), self.doc, &node.span()).into(),
-                    );
+                    return Err(Bad::docspan(
+                        format!("Unknown name: '{name}'"),
+                        self.doc,
+                        &node.span(),
+                    )
+                    .into());
                 }
             }
         }
 
         Ok(rl)
     }
-
 }
 
 impl<'a> RateLimitSection<'a> {
@@ -66,7 +72,9 @@ impl<'a> RateLimitSection<'a> {
     ) -> miette::Result<AllRateConfig> {
         let take_num = |key: &str| -> miette::Result<usize> {
             let Some(val) = args.get(key) else {
-                return Err(Bad::docspan(format!("Missing key: '{key}'"), self.doc, &node.span()).into());
+                return Err(
+                    Bad::docspan(format!("Missing key: '{key}'"), self.doc, &node.span()).into(),
+                );
             };
             let Some(val) = val.as_integer().and_then(|v| usize::try_from(v).ok()) else {
                 return Err(Bad::docspan(
@@ -83,7 +91,9 @@ impl<'a> RateLimitSection<'a> {
         };
         let take_str = |key: &str| -> miette::Result<&str> {
             let Some(val) = args.get(key) else {
-                return Err(Bad::docspan(format!("Missing key: '{key}'"), self.doc, &node.span()).into());
+                return Err(
+                    Bad::docspan(format!("Missing key: '{key}'"), self.doc, &node.span()).into(),
+                );
             };
             let Some(val) = val.as_string() else {
                 return Err(Bad::docspan(
@@ -98,8 +108,8 @@ impl<'a> RateLimitSection<'a> {
 
         // mandatory/common fields
         let kind = take_str("kind")?;
-        let tokens_per_bucket = NonZeroUsize::new(take_num("tokens-per-bucket")?)
-            .ok_or_else(|| {
+        let tokens_per_bucket =
+            NonZeroUsize::new(take_num("tokens-per-bucket")?).ok_or_else(|| {
                 Bad::docspan(
                     "'tokens-per-bucket' must be a positive",
                     self.doc,
@@ -107,23 +117,17 @@ impl<'a> RateLimitSection<'a> {
                 )
             })?;
 
-        let refill_qty = NonZeroUsize::new(take_num("refill-qty")?)
-            .ok_or_else(|| {
-                Bad::docspan(
-                    "'refill-qty' must be a positive",
-                    self.doc,
-                    &node.span(),
-                )
-            })?;
+        let refill_qty = NonZeroUsize::new(take_num("refill-qty")?).ok_or_else(|| {
+            Bad::docspan("'refill-qty' must be a positive", self.doc, &node.span())
+        })?;
 
-        let refill_rate_ms = NonZeroUsize::new(take_num("refill-rate-ms")?)
-            .ok_or_else(|| {
-                Bad::docspan(
-                    "'refill-rate-ms' must be a positive",
-                    self.doc,
-                    &node.span(),
-                )
-            })?;
+        let refill_rate_ms = NonZeroUsize::new(take_num("refill-rate-ms")?).ok_or_else(|| {
+            Bad::docspan(
+                "'refill-rate-ms' must be a positive",
+                self.doc,
+                &node.span(),
+            )
+        })?;
 
         let multi_cfg = || -> miette::Result<MultiRaterConfig> {
             let max_buckets = take_num("max-buckets")?;

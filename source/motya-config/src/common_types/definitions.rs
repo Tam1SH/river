@@ -1,10 +1,5 @@
-
-use std::{collections::{HashMap, HashSet}, path::PathBuf};
 use fqdn::FQDN;
-
-use crate::common_types::builtin_filters_name::load_definitions_table;
-
-
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FilterChain {
@@ -32,7 +27,7 @@ pub enum PluginSource {
 #[derive(Debug, Clone, PartialEq)]
 pub struct KeyTemplateConfig {
     pub source: String,
-    pub fallback: Option<String>,      
+    pub fallback: Option<String>,
     pub algorithm: HashAlgorithm,
     pub transforms: Vec<Transform>,
 }
@@ -45,20 +40,17 @@ pub struct HashAlgorithm {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Transform {
-    pub name: String,              
-    pub params: HashMap<String, String>,  
+    pub name: String,
+    pub params: HashMap<String, String>,
 }
-
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct NamedFilterChain {
     pub name: String,
-    pub chain: FilterChain
+    pub chain: FilterChain,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Modificator {
-    Chain(NamedFilterChain)
+    Chain(NamedFilterChain),
 }
-

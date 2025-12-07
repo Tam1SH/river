@@ -2,22 +2,22 @@
 mod tests {
     use std::fs::File;
     use std::io::Write;
-    use std::sync::Arc;
-    use std::time::Duration;
     use std::net::TcpListener;
+    use std::sync::Arc;
     use std::thread;
+    use std::time::Duration;
 
+    use motya::proxy::filters::{chain_resolver::ChainResolver, registry::FilterRegistry};
     use motya::proxy::motya_proxy_service;
     use motya::proxy::upstream_factory::UpstreamFactory;
     use motya::proxy::watcher::file_watcher::ConfigWatcher;
-    use motya_config::common_types::definitions_table::DefinitionsTable;
-    use tokio::sync::Mutex;
-    use tokio::time::timeout;
-    use tempfile::tempdir;
     use motya_config::builder::{ConfigLoader, FileConfigLoaderProvider};
-    use motya::proxy::filters::{chain_resolver::ChainResolver, registry::FilterRegistry};
+    use motya_config::common_types::definitions_table::DefinitionsTable;
     use pingora::server::Server;
     use reqwest::Client;
+    use tempfile::tempdir;
+    use tokio::sync::Mutex;
+    use tokio::time::timeout;
 
     fn get_free_port() -> u16 {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -27,7 +27,7 @@ mod tests {
     async fn get_response_body(port: u16, path: &str) -> Option<String> {
         let client = Client::new();
         let url = format!("http://127.0.0.1:{}{}", port, path);
-        
+
         match client.get(&url).send().await {
             Ok(resp) => {
                 // We accept 200 and 500 (used in Stage 2) as valid responses for verification
@@ -36,21 +36,17 @@ mod tests {
                 } else {
                     None
                 }
-            },
+            }
             Err(_) => None,
         }
     }
 
-    async fn wait_for_route_update(
-        port: u16, 
-        path: &str, 
-        expected_body: Option<&str>
-    ) {
+    async fn wait_for_route_update(port: u16, path: &str, expected_body: Option<&str>) {
         let check_future = async {
             loop {
                 let current_body = get_response_body(port, path).await;
                 let expected_owned = expected_body.map(|s| s.to_string());
-                
+
                 if current_body == expected_owned {
                     return;
                 }
@@ -60,8 +56,10 @@ mod tests {
 
         if timeout(Duration::from_secs(5), check_future).await.is_err() {
             panic!(
-                "Timeout waiting for path '{}' to become {:?}. Current: {:?}", 
-                path, expected_body, get_response_body(port, path).await
+                "Timeout waiting for path '{}' to become {:?}. Current: {:?}",
+                path,
+                expected_body,
+                get_response_body(port, path).await
             );
         }
     }
@@ -71,7 +69,7 @@ mod tests {
         let dir = tempdir().expect("Failed to create temp dir");
         let config_path = dir.path().join("motya.conf");
         let port = get_free_port();
-        
+
         // We use __PORT__ placeholder to ensure we can run on a random free port
         let config_stage_1 = r#"
             services {
@@ -123,24 +121,30 @@ mod tests {
 
         let mut definitions = DefinitionsTable::default();
         let loader = ConfigLoader::default();
-        
-        let config = loader.clone()
+
+        let config = loader
+            .clone()
             .load_entry_point(Some(config_path.clone()), &mut definitions)
             .await
             .expect("Failed to load initial config")
             .expect("Config should be present");
 
         let registry = Arc::new(Mutex::new(FilterRegistry::default()));
-        let resolver = ChainResolver::new(definitions.clone(), registry).await.unwrap();
+        let resolver = ChainResolver::new(definitions.clone(), registry)
+            .await
+            .unwrap();
         let factory = UpstreamFactory::new(resolver.clone());
 
         // Start the real Pingora server in background
-        let mut app_server = Server::new_with_opt_and_conf(config.pingora_opt(), config.pingora_server_conf());
+        let mut app_server =
+            Server::new_with_opt_and_conf(config.pingora_opt(), config.pingora_server_conf());
         app_server.bootstrap();
 
         let proxy_config = config.basic_proxies[0].clone();
-        let (service, shared_state) = motya_proxy_service(proxy_config, resolver, &app_server).await.unwrap();
-        
+        let (service, shared_state) = motya_proxy_service(proxy_config, resolver, &app_server)
+            .await
+            .unwrap();
+
         app_server.add_services(vec![service]);
         thread::spawn(move || {
             app_server.run_forever();
@@ -152,11 +156,11 @@ mod tests {
             definitions,
             config_path.clone(),
             factory.clone(),
-            loader
+            loader,
         );
 
         watcher.insert_proxy_state("TestService".to_string(), shared_state.clone());
-        
+
         tokio::spawn(async move {
             let Err(e) = watcher.watch().await;
             panic!("Watcher failed: {}", e);
@@ -165,14 +169,13 @@ mod tests {
         println!("Checking Stage 1...");
         // Ensure server is up and routes are ready
         wait_for_route_update(port, "/1", Some("OK1")).await;
-        
+
         assert_eq!(get_response_body(port, "/1").await, Some("OK1".to_string()));
         assert_eq!(get_response_body(port, "/2").await, Some("OK2".to_string()));
         assert_eq!(get_response_body(port, "/3").await, Some("OK3".to_string()));
         assert_eq!(get_response_body(port, "/4").await, None);
         assert_eq!(get_response_body(port, "/5").await, None);
 
-        
         println!("Writing Stage 2 (FS modification)...");
         {
             let mut file = File::create(&config_path).unwrap();
@@ -181,14 +184,25 @@ mod tests {
             file.sync_all().unwrap();
         }
 
-        
         wait_for_route_update(port, "/4", Some("OK4")).await;
 
         println!("Verifying Stage 2...");
-        
-        assert_eq!(get_response_body(port, "/1").await, None, "Route /1 should be removed");
-        assert_eq!(get_response_body(port, "/2").await, Some("BAD".to_string()), "Route /2 should be updated");
-        assert_eq!(get_response_body(port, "/3").await, None, "Route /3 should be removed");
+
+        assert_eq!(
+            get_response_body(port, "/1").await,
+            None,
+            "Route /1 should be removed"
+        );
+        assert_eq!(
+            get_response_body(port, "/2").await,
+            Some("BAD".to_string()),
+            "Route /2 should be updated"
+        );
+        assert_eq!(
+            get_response_body(port, "/3").await,
+            None,
+            "Route /3 should be removed"
+        );
         assert_eq!(get_response_body(port, "/4").await, Some("OK4".to_string()));
         assert_eq!(get_response_body(port, "/5").await, Some("OK5".to_string()));
 
@@ -204,8 +218,11 @@ mod tests {
 
         println!("Verifying Stage 3...");
         assert_eq!(get_response_body(port, "/1").await, Some("OK1".to_string()));
-        assert_eq!(get_response_body(port, "/2").await, Some("OK NOW".to_string()));
-        assert_eq!(get_response_body(port, "/3").await, Some("OK3".to_string())); 
+        assert_eq!(
+            get_response_body(port, "/2").await,
+            Some("OK NOW".to_string())
+        );
+        assert_eq!(get_response_body(port, "/3").await, Some("OK3".to_string()));
         assert_eq!(get_response_body(port, "/4").await, Some("OK4".to_string()));
         assert_eq!(get_response_body(port, "/5").await, Some("OK5".to_string()));
     }

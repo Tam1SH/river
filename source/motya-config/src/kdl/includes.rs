@@ -1,8 +1,8 @@
-use kdl::KdlDocument;
 use crate::{
-    common_types::{section_parser::SectionParser, bad::Bad},
+    common_types::{bad::Bad, section_parser::SectionParser},
     kdl::utils,
 };
+use kdl::KdlDocument;
 
 pub struct IncludesSection<'a> {
     doc: &'a KdlDocument,
@@ -23,18 +23,14 @@ impl<'a> IncludesSection<'a> {
         let mut paths = Vec::new();
 
         if let Some(inc_block) = utils::optional_child_doc(self.doc, self.doc, "includes") {
-            
             let nodes = utils::data_nodes(self.doc, inc_block)?;
 
             for (node, name, args) in nodes {
                 if name == "include" {
-                    let path_str = utils::extract_one_str_arg(
-                        self.doc,
-                        node,
-                        "include",
-                        args,
-                        |s| Some(s.to_string())
-                    )?;
+                    let path_str =
+                        utils::extract_one_str_arg(self.doc, node, "include", args, |s| {
+                            Some(s.to_string())
+                        })?;
                     paths.push(path_str);
                 } else {
                     return Err(Bad::docspan(

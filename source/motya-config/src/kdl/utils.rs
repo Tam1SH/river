@@ -159,7 +159,11 @@ pub(crate) fn extract_one_str_arg<T, F: FnOnce(&str) -> Option<T>>(
         [one] => one.value().as_string().and_then(f),
         _ => None,
     }
-    .or_bail(format!("Incorrect argument for '{name}'"), doc, &node.span())
+    .or_bail(
+        format!("Incorrect argument for '{name}'"),
+        doc,
+        &node.span(),
+    )
 }
 
 /// Extract a single un-named bool argument, like `daemonize true`
@@ -173,7 +177,11 @@ pub(crate) fn extract_one_bool_arg(
         [one] => one.value().as_bool(),
         _ => None,
     }
-    .or_bail(format!("Incorrect argument for '{name}'"), doc, &node.span())
+    .or_bail(
+        format!("Incorrect argument for '{name}'"),
+        doc,
+        &node.span(),
+    )
 }
 
 /// Like `extract_one_str_arg`, but with bonus "str:str" key/val pairs
@@ -212,24 +220,35 @@ pub(crate) fn extract_one_str_arg_with_kv_args<T, F: FnOnce(&str) -> Option<T>>(
 }
 
 pub trait HashMapValidationExt {
-    fn ensure_only_keys(self, allowed: &[&str], doc: &KdlDocument, node: &KdlNode) -> miette::Result<Self>
+    fn ensure_only_keys(
+        self,
+        allowed: &[&str],
+        doc: &KdlDocument,
+        node: &KdlNode,
+    ) -> miette::Result<Self>
     where
         Self: Sized;
 }
 
 impl<V> HashMapValidationExt for HashMap<&str, V> {
-    fn ensure_only_keys(self, allowed: &[&str], doc: &KdlDocument, node: &KdlNode) -> miette::Result<Self> {
-        
+    fn ensure_only_keys(
+        self,
+        allowed: &[&str],
+        doc: &KdlDocument,
+        node: &KdlNode,
+    ) -> miette::Result<Self> {
         if let Some(bad_key) = self.keys().find(|k| !allowed.contains(k)) {
-            return Err(                
-                Bad::docspan(
-                    format!("Unknown configuration key: '{bad_key}'. Allowed keys are: {:?}", allowed),
-                    doc,
-                    &node.span(),
-                )
+            return Err(Bad::docspan(
+                format!(
+                    "Unknown configuration key: '{bad_key}'. Allowed keys are: {:?}",
+                    allowed
+                ),
+                doc,
+                &node.span(),
+            )
             .into());
         }
-        
+
         Ok(self)
     }
 }

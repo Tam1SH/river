@@ -23,6 +23,5 @@ pub struct ListenerConfig {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Listeners {
-    pub list_cfgs: Vec<ListenerConfig>
+    pub list_cfgs: Vec<ListenerConfig>,
 }
-

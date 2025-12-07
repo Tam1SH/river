@@ -1,24 +1,10 @@
-//! This is the *actual* internal configuration structure.
-//!
-//! It is ONLY used for the internal configuration, and should not ever
-//! be exposed as the public API for CLI, Env vars, or via Serde.
-//!
-//! This is used as the buffer between any external stable UI, and internal
-//! impl details which may change at any time.
-
-use std::path::PathBuf;
-
-use arc_swap::ArcSwap;
-use http::Uri;
-use pingora::{
-    server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf},
+use crate::common_types::{
+    connectors::Connectors, definitions::KeyTemplateConfig, file_server::FileServerConfig,
+    listeners::Listeners,
 };
-
+use pingora::server::configuration::{Opt as PingoraOpt, ServerConf as PingoraServerConf};
+use std::path::PathBuf;
 use tracing::warn;
-use crate::{common_types::{
-    connectors::Connectors, definitions::KeyTemplateConfig, file_server::FileServerConfig, listeners::Listeners, rate_limiter::RateLimitingConfig
-}};
-// use crate::proxy::request_selector::{RequestSelector, null_selector};
 
 /// Motya's internal configuration
 #[derive(Debug, Clone, PartialEq)]
@@ -32,8 +18,6 @@ pub struct Config {
     pub basic_proxies: Vec<ProxyConfig>,
     pub file_servers: Vec<FileServerConfig>,
 }
-
-
 
 impl Config {
     /// Get the [`Opt`][PingoraOpt] field for Pingora
@@ -114,11 +98,6 @@ impl Config {
         }
     }
 }
-
-
-
-
-
 
 //
 // Basic Proxy Configuration

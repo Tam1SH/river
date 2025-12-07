@@ -8,7 +8,7 @@ macro_rules! define_builtin_filters {
 
             requests: {
                 "motya.request.upsert-header" => RequestUpsertHeader,
-                "motya.request.remove-header" => RequestRemoveHeaderKeyRegex,                
+                "motya.request.remove-header" => RequestRemoveHeaderKeyRegex,
                 "motya.request.strip-prefix" => StripPrefix,
                 "motya.request.rewrite-path" => RewritePathRegex,
             }
@@ -30,10 +30,10 @@ macro_rules! impl_definitions_table {
         )*
     ) => {
         use crate::common_types::definitions_table::DefinitionsTable;
-        
+
         pub fn load_definitions_table() -> DefinitionsTable {
             let mut definitions = DefinitionsTable::default();
-            
+
             $($(
                 let key = fqdn::fqdn!($key);
                 definitions.insert_filter(key);
@@ -43,6 +43,5 @@ macro_rules! impl_definitions_table {
         }
     };
 }
-
 
 define_builtin_filters!(impl_definitions_table);

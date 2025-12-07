@@ -1,18 +1,14 @@
-use std::hash::{Hash, Hasher};
-use std::{collections::HashMap, hash::DefaultHasher};
 use std::fmt::Debug;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 use http::uri::PathAndQuery;
-use pingora::{prelude::HttpPeer, upstreams::peer::Proxy, protocols::l4::socket::SocketAddr};
+use pingora::{prelude::HttpPeer, protocols::l4::socket::SocketAddr, upstreams::peer::Proxy};
 
-use crate::common_types::definitions_table::DefinitionsTable;
-use crate::common_types::simple_response_type::SimpleResponseConfig;
-use crate::{
-    common_types::definitions::{FilterChain, Modificator},
-    internal::UpstreamOptions,
+use crate::common_types::{
+    definitions::Modificator, definitions_table::DefinitionsTable,
+    simple_response_type::SimpleResponseConfig,
 };
-
-use derive_more::Deref;
+use crate::internal::UpstreamOptions;
 
 #[derive(Hash, Clone, Debug, PartialEq)]
 pub enum ALPN {
@@ -41,12 +37,11 @@ impl From<ALPN> for pingora::protocols::ALPN {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum RouteMatcher {    
+pub enum RouteMatcher {
     #[default]
     Exact,
-    Prefix
+    Prefix,
 }
 
 #[derive(Debug, Clone)]
@@ -55,29 +50,27 @@ pub struct HttpPeerConfig {
     pub peer: HttpPeer,
     pub prefix_path: PathAndQuery,
     pub target_path: PathAndQuery,
-    pub matcher: RouteMatcher
+    pub matcher: RouteMatcher,
 }
 
 impl PartialEq for HttpPeerConfig {
     fn eq(&self, other: &Self) -> bool {
-        
-        if self.prefix_path != other.prefix_path 
-           || self.target_path != other.target_path 
-           || self.peer.scheme != other.peer.scheme 
-           || self.peer.sni != other.peer.sni 
+        if self.prefix_path != other.prefix_path
+            || self.target_path != other.target_path
+            || self.peer.scheme != other.peer.scheme
+            || self.peer.sni != other.peer.sni
         {
             return false;
         }
 
-        
         match (&self.peer._address, &other.peer._address) {
-            (SocketAddr::Inet(a), SocketAddr::Inet(b)) if a == b => { },
+            (SocketAddr::Inet(a), SocketAddr::Inet(b)) if a == b => {}
             _ => return false,
         }
 
         let hash_proxy = |p: &Option<Proxy>| -> u64 {
             let mut hasher = DefaultHasher::new();
-            p.hash(&mut hasher); 
+            p.hash(&mut hasher);
             hasher.finish()
         };
 
@@ -85,21 +78,19 @@ impl PartialEq for HttpPeerConfig {
     }
 }
 
-
 //TODO: Convert to ConfigType
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum UpstreamConfig {
     Service(HttpPeerConfig),
     Static(SimpleResponseConfig),
-    MultiServer(MultiServerUpstreamConfig)
+    MultiServer(MultiServerUpstreamConfig),
 }
-
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UpstreamServer {
     pub address: std::net::SocketAddr,
-    pub weight: usize
+    pub weight: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -117,13 +108,13 @@ pub enum ConnectorsLeaf {
     Upstream(UpstreamConfig),
     Modificator(Modificator),
     LoadBalance(UpstreamOptions),
-    Section(Vec<ConnectorsLeaf>)
+    Section(Vec<ConnectorsLeaf>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Connectors { 
+pub struct Connectors {
     pub upstreams: Vec<UpstreamContextConfig>,
-    pub anonymous_definitions: DefinitionsTable, 
+    pub anonymous_definitions: DefinitionsTable,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -132,4 +123,3 @@ pub struct UpstreamContextConfig {
     pub chains: Vec<Modificator>,
     pub lb_options: UpstreamOptions,
 }
-

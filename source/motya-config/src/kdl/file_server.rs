@@ -2,27 +2,29 @@ use std::collections::HashMap;
 
 use kdl::KdlDocument;
 
-use crate::{common_types::{section_parser::SectionParser, file_server::FileServerConfig}, kdl::{listeners::ListenersSection, utils}};
+use crate::{
+    common_types::{file_server::FileServerConfig, section_parser::SectionParser},
+    kdl::{listeners::ListenersSection, utils},
+};
 
 pub struct FileServerSection<'a> {
     doc: &'a KdlDocument,
-    name: &'a str
+    name: &'a str,
 }
 
 impl SectionParser<KdlDocument, FileServerConfig> for FileServerSection<'_> {
     fn parse_node(&self, node: &KdlDocument) -> miette::Result<FileServerConfig> {
-        self.extract_file_server(node)    
+        self.extract_file_server(node)
     }
 }
 
 impl<'a> FileServerSection<'a> {
-    pub fn new(doc: &'a KdlDocument, name: &'a str) -> Self { Self { doc, name } }
+    pub fn new(doc: &'a KdlDocument, name: &'a str) -> Self {
+        Self { doc, name }
+    }
 
     /// Extracts a single file server from the `services` block
-    fn extract_file_server(
-        &self,
-        node: &KdlDocument,
-    ) -> miette::Result<FileServerConfig> {
+    fn extract_file_server(&self, node: &KdlDocument) -> miette::Result<FileServerConfig> {
         // Listeners
         //
         let listeners = ListenersSection::new(self.doc).parse_node(node)?;
@@ -36,8 +38,9 @@ impl<'a> FileServerSection<'a> {
         }
 
         let base_path = if let Some((bpnode, bpargs)) = map.get("base-path") {
-            let val =
-                utils::extract_one_str_arg(self.doc, bpnode, "base-path", bpargs, |a| Some(a.to_string()))?;
+            let val = utils::extract_one_str_arg(self.doc, bpnode, "base-path", bpargs, |a| {
+                Some(a.to_string())
+            })?;
             Some(val.into())
         } else {
             None
@@ -49,7 +52,4 @@ impl<'a> FileServerSection<'a> {
             base_path,
         })
     }
-    
 }
-
-    

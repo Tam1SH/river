@@ -209,7 +209,9 @@ where
         RateLimiter::builder()
             .initial(self.max_tokens_per_bucket.get())
             .max(self.max_tokens_per_bucket.get())
-            .interval(Duration::from_millis(self.refill_interval_millis.get() as u64))
+            .interval(Duration::from_millis(
+                self.refill_interval_millis.get() as u64
+            ))
             .refill(self.refill_qty.get())
             .fair(true)
             .build()
@@ -227,7 +229,6 @@ mod test {
 
     #[tokio::test]
     async fn smoke() {
-        
         let config = MultiRaterConfig {
             threads: 2,
             max_buckets: 5,

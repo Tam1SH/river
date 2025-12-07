@@ -1,18 +1,28 @@
 use std::{path::PathBuf, sync::Arc};
 
-use clap::{CommandFactory, FromArgMatches};
-use motya_config::{cli::{builder::{CliConfigBuilder, RouteAction, RouteMatch, SyntheticRoute}, cli::{Cli, Commands}}, common_types::definitions_table::DefinitionsTable};
+use crate::{
+    files::motya_file_server,
+    proxy::{
+        filters::{chain_resolver::ChainResolver, generate_registry},
+        motya_proxy_service,
+        plugins::store::WasmPluginStore,
+        upstream_factory::UpstreamFactory,
+        watcher::file_watcher::ConfigWatcher,
+    },
+};
+use motya_config::{
+    builder::{ConfigLoader, FileConfigLoaderProvider},
+    internal::Config,
+};
+use motya_config::{
+    cli::{
+        builder::CliConfigBuilder,
+        cli_struct::{Cli, Commands},
+    },
+    common_types::definitions_table::DefinitionsTable,
+};
 use pingora::{server::Server, services::Service};
 use tokio::sync::Mutex;
-use motya_config::{builder::{ConfigLoader, FileConfigLoaderProvider}, internal::Config};
-use crate::{
-    files::motya_file_server, 
-    proxy::{filters::{chain_resolver::ChainResolver, generate_registry}, 
-    plugins::store::WasmPluginStore,
-    motya_proxy_service, 
-    upstream_factory::UpstreamFactory,
-    watcher::file_watcher::ConfigWatcher}};
-
 
 pub struct AppContext {
     config: Config,
@@ -22,7 +32,6 @@ pub struct AppContext {
 }
 
 fn resolve_config_path(cli: &Cli) -> PathBuf {
-    
     if let Some(path) = &cli.config_entry {
         return path.clone();
     }
@@ -31,13 +40,11 @@ fn resolve_config_path(cli: &Cli) -> PathBuf {
         return env_path.into();
     }
 
-    "/etc/motya/entry.kdl".into() 
+    "/etc/motya/entry.kdl".into()
 }
-
 
 impl AppContext {
     pub async fn bootstrap(cli_args: Cli) -> miette::Result<AppContext> {
-
         let config_path = resolve_config_path(&cli_args);
 
         tracing::info!(config = ?cli_args, "CLI config parsed");
@@ -45,7 +52,6 @@ impl AppContext {
         // 2. Load Registry & Global Definitions
         let mut global_definitions = DefinitionsTable::default();
         let mut registry_map = generate_registry::load_registry(&mut global_definitions);
-        
 
         // 3. Load Config File
         let config = Self::load_config(&cli_args, &config_path, &mut global_definitions).await?;
@@ -59,15 +65,16 @@ impl AppContext {
 
         // 5. Setup Watcher
         let watcher = ConfigWatcher::new(
-            config.clone(), 
+            config.clone(),
             global_definitions,
             config_path,
             UpstreamFactory::new(resolver.clone()),
-            ConfigLoader::default()
+            ConfigLoader::default(),
         );
 
         // 6. Prepare Server instance (Pingora)
-        let server = Server::new_with_opt_and_conf(config.pingora_opt(), config.pingora_server_conf());
+        let server =
+            Server::new_with_opt_and_conf(config.pingora_opt(), config.pingora_server_conf());
 
         Ok(AppContext {
             config,
@@ -76,25 +83,24 @@ impl AppContext {
             server,
         })
     }
-    
 
-    pub async fn build_services(
-        &mut self
-    ) -> miette::Result<Vec<Box<dyn Service>>> {
+    pub async fn build_services(&mut self) -> miette::Result<Vec<Box<dyn Service>>> {
         let mut services: Vec<Box<dyn Service>> = vec![];
 
         tracing::info!("Configuring Basic Proxies...");
-        
+
         for proxy_conf in &self.config.basic_proxies {
             tracing::info!("Configuring Basic Proxy: {}", proxy_conf.name);
-            
-            let (motya_service, shared_state) = motya_proxy_service(
-                proxy_conf.clone(), 
-                self.resolver.clone(), 
-                &self.server
-            ).await.map_err(|e| miette::miette!("Failed create service {}: {}", proxy_conf.name, e))?;
 
-            self.watcher.insert_proxy_state(motya_service.name().to_string(), shared_state);
+            let (motya_service, shared_state) =
+                motya_proxy_service(proxy_conf.clone(), self.resolver.clone(), &self.server)
+                    .await
+                    .map_err(|e| {
+                        miette::miette!("Failed create service {}: {}", proxy_conf.name, e)
+                    })?;
+
+            self.watcher
+                .insert_proxy_state(motya_service.name().to_string(), shared_state);
             services.push(motya_service);
         }
 
@@ -107,33 +113,43 @@ impl AppContext {
         Ok(services)
     }
 
-    pub fn ready(self) -> (Server, ConfigWatcher) { (self.server, self.watcher) }
+    pub fn ready(self) -> (Server, ConfigWatcher) {
+        (self.server, self.watcher)
+    }
 
-    async fn load_config(cli_args: &Cli, config_path: &PathBuf, global_definitions: &mut DefinitionsTable) -> miette::Result<Config> {
+    async fn load_config(
+        cli_args: &Cli,
+        config_path: &PathBuf,
+        global_definitions: &mut DefinitionsTable,
+    ) -> miette::Result<Config> {
         let mut config = match &cli_args.command {
-            
             Some(Commands::Hello { port, text }) => {
                 CliConfigBuilder::build_hello(*port, text.clone())?
-            },
+            }
 
             Some(Commands::Serve { port, map }) => {
                 let mut routes = Vec::new();
-                
+
                 for mapping in map {
-                    
                     let syntetic_route = CliConfigBuilder::parse_map_string(mapping)
                         .map_err(|err| miette::miette!("{err}"))?;
 
                     routes.push(syntetic_route);
                 }
 
-                tracing::info!("🚀 Starting in SERVE mode on port {} with {} routes", port, routes.len());
-                
+                tracing::info!(
+                    "🚀 Starting in SERVE mode on port {} with {} routes",
+                    port,
+                    routes.len()
+                );
+
                 CliConfigBuilder::build_routes(*port, routes)?
-            },
+            }
             None => {
                 let loader = ConfigLoader::default();
-                loader.load_entry_point(Some(config_path.into()), global_definitions).await?
+                loader
+                    .load_entry_point(Some(config_path.into()), global_definitions)
+                    .await?
                     .inspect(|_| tracing::info!("Applying config"))
                     .unwrap_or_else(|| {
                         tracing::warn!("No configuration file provided, using default");
@@ -141,13 +157,13 @@ impl AppContext {
                     })
             }
         };
-        
+
         tracing::info!("Loading config from: {:?}", config_path);
 
         // Apply CLI overrides & Validate
         apply_cli(&mut config, cli_args);
         tracing::debug!(?config, "Full configuration");
-        
+
         tracing::info!("Validating configuration...");
         config.validate();
         tracing::info!("Validation complete");
@@ -155,10 +171,6 @@ impl AppContext {
         Ok(config)
     }
 }
-
-
-
-
 
 fn apply_cli(conf: &mut Config, cli: &Cli) {
     let Cli {
@@ -170,7 +182,7 @@ fn apply_cli(conf: &mut Config, cli: &Cli) {
         upgrade,
         pidfile,
         upgrade_socket,
-        command: _
+        command: _,
     } = cli;
 
     conf.validate_configs |= validate_configs;
@@ -203,4 +215,3 @@ fn apply_cli(conf: &mut Config, cli: &Cli) {
         conf.threads_per_service = *tps;
     }
 }
-

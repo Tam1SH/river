@@ -5,20 +5,21 @@ use pingora_http::ResponseHeader;
 use pingora_proxy::Session;
 use regex::Regex;
 
-use crate::proxy::{MotyaContext, filters::{builtin::helpers::{ensure_empty, extract_val}, types::ResponseModifyMod}};
+use crate::proxy::{
+    filters::{
+        builtin::helpers::{ensure_empty, extract_val},
+        types::ResponseModifyMod,
+    },
+    MotyaContext,
+};
 
 
-// Remove header by key
-//
-//
-
-/// Removes a header if the key matches a given regex
 pub struct RemoveHeaderKeyRegex {
     regex: Regex,
 }
 
 impl RemoveHeaderKeyRegex {
-    /// Create from the settings field
+    
     pub fn from_settings(mut settings: BTreeMap<String, String>) -> Result<Self> {
         let mat = extract_val("pattern", &mut settings)?;
 
@@ -40,7 +41,7 @@ impl ResponseModifyMod for RemoveHeaderKeyRegex {
         header: &mut ResponseHeader,
         _ctx: &mut MotyaContext,
     ) {
-        // Find all the headers that have keys that match the regex...
+        
         let headers = header
             .headers
             .keys()
@@ -54,7 +55,7 @@ impl ResponseModifyMod for RemoveHeaderKeyRegex {
             })
             .collect::<Vec<_>>();
 
-        // ... and remove them
+            
         for h in headers {
             assert!(header.remove_header(&h).is_some());
         }

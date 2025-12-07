@@ -2,46 +2,52 @@ use std::sync::Arc;
 
 use arc_swap::ArcSwap;
 use async_trait::async_trait;
-
 use futures_util::future::try_join_all;
-use http::Uri;
-use http::uri::{Parts, PathAndQuery};
-use pingora::{server::Server, upstreams::peer::HttpPeer, Result};
+use http::uri::PathAndQuery;
+use pingora::{Result, prelude::HttpPeer, server::Server};
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::{ProxyHttp, Session};
-use motya_config::legacy::{multi::MultiRaterInstance, single::SingleInstance, something::Outcome};
-use motya_config::{common_types::{connectors::{UpstreamConfig, UpstreamContextConfig}, listeners::Listeners, rate_limiter::{AllRateConfig, RateLimitingConfig}}, internal::{ProxyConfig, SelectionKind, UpstreamOptions}};
 use uuid::Uuid;
-use crate::proxy::context::{ContextInfo, SessionInfo};
-use crate::proxy::filters::builtin::simple_response::SimpleResponse;
-use crate::{
-    proxy::{
-        filters::{chain_resolver::ChainResolver, types::{RequestFilterMod, RequestModifyMod, ResponseModifyMod}}, plugins::module::WasmModule, populate_listeners::populate_listners, upstream_factory::UpstreamFactory, upstream_router::{UpstreamContext, UpstreamRouter}
+
+use crate::proxy::{
+    filters::{
+        chain_resolver::ChainResolver,
+        types::{RequestFilterMod, RequestModifyMod, ResponseModifyMod},
     },
+    context::{ContextInfo, SessionInfo},
+    filters::builtin::simple_response::SimpleResponse,
+    populate_listeners::populate_listners,
+    upstream_factory::UpstreamFactory,
+    upstream_router::{UpstreamContext, UpstreamRouter},
+};
+use motya_config::{
+    common_types::{
+        connectors::{UpstreamConfig, UpstreamContextConfig},
+        listeners::Listeners,
+    },
+    internal::ProxyConfig,
 };
 
 
-pub mod upstream_router;
-pub mod filters;
-pub mod plugins;
-pub mod upstream_factory;
-pub mod populate_listeners;
-pub mod watcher;
 pub mod balancer;
 pub mod context;
+pub mod filters;
+pub mod plugins;
+pub mod populate_listeners;
+pub mod upstream_factory;
+pub mod upstream_router;
+pub mod watcher;
 
-pub struct RateLimiters {
-    request_filter_stage_multi: Vec<MultiRaterInstance>,
-    request_filter_stage_single: Vec<SingleInstance>,
-}
-
+// pub struct RateLimiters {
+//     request_filter_stage_multi: Vec<MultiRaterInstance>,
+//     request_filter_stage_single: Vec<SingleInstance>,
+// }
 
 pub type SharedProxyState = Arc<ArcSwap<UpstreamRouter<UpstreamContext>>>;
 
-
 pub struct MotyaProxyService {
     // pub rate_limiters: RateLimiters,
-    pub state: SharedProxyState
+    pub state: SharedProxyState,
 }
 
 /// Create a proxy service, with the type parameters chosen based on the config file
@@ -50,22 +56,13 @@ pub async fn motya_proxy_service(
     chain_resolver: ChainResolver,
     server: &Server,
 ) -> miette::Result<(Box<dyn pingora::services::Service>, SharedProxyState)> {
-    
     let factory = UpstreamFactory::new(chain_resolver);
 
-    MotyaProxyService::from_basic_conf(
-        conf.connectors.upstreams,
-        &conf.listeners,
-        factory,
-        server
-    ).await
+    MotyaProxyService::from_basic_conf(conf.connectors.upstreams, &conf.listeners, factory, server)
+        .await
 }
 
-
-
-
-impl MotyaProxyService
-{
+impl MotyaProxyService {
     /// Create a new [MotyaProxyService] from the given [ProxyConfig]
     pub async fn from_basic_conf(
         upstream_configs: Vec<UpstreamContextConfig>,
@@ -73,15 +70,15 @@ impl MotyaProxyService
         upstream_factory: UpstreamFactory,
         server: &Server,
     ) -> miette::Result<(Box<dyn pingora::services::Service>, SharedProxyState)> {
+        let upstream_ctx = try_join_all(
+            upstream_configs
+                .into_iter()
+                .map(|cfg| upstream_factory.create_context(cfg)),
+        )
+        .await?;
 
-        let upstream_ctx = try_join_all(upstream_configs
-            .into_iter()
-            .map(|cfg| upstream_factory.create_context(cfg)))
-            .await?;
-        
         let router = UpstreamRouter::build(upstream_ctx)
             .expect("Paths must be valid after parsing the configuration");
-            
 
         // let mut request_filter_stage_multi = vec![];
         // let mut request_filter_stage_single = vec![];
@@ -102,7 +99,9 @@ impl MotyaProxyService
         let shared_state = Arc::new(ArcSwap::from_pointee(router));
         let mut my_proxy = pingora_proxy::http_proxy_service_with_name(
             &server.configuration,
-            Self { state: shared_state.clone() },
+            Self {
+                state: shared_state.clone(),
+            },
             "ADADWDWDWDW",
         );
 
@@ -112,22 +111,18 @@ impl MotyaProxyService
     }
 }
 
-
 pub struct MotyaContext {
-    selector_buf: Vec<u8>,
-    router: Arc<UpstreamRouter<UpstreamContext>>
+    router: Arc<UpstreamRouter<UpstreamContext>>,
 }
 
 #[async_trait]
-impl ProxyHttp for MotyaProxyService
-{
+impl ProxyHttp for MotyaProxyService {
     type CTX = MotyaContext;
 
     fn new_ctx(&self) -> Self::CTX {
         let router = self.state.load();
         MotyaContext {
-            selector_buf: Vec::new(),
-            router: router.clone()
+            router: router.clone(),
         }
     }
 
@@ -140,7 +135,6 @@ impl ProxyHttp for MotyaProxyService
         let path = session.req_header().uri.path();
 
         if let Some(upstream_ctx) = router.get_upstream_by_path(path) {
-            
             // let multis = self
             //     .rate_limiters
             //     .request_filter_stage_multi
@@ -186,9 +180,11 @@ impl ProxyHttp for MotyaProxyService
                     }
                 }
             }
-            
+
             if let UpstreamConfig::Static(response) = upstream_ctx.upstream.clone() {
-                let _ = std::convert::Into::<SimpleResponse>::into(response).request_filter(session, ctx).await?;
+                let _ = std::convert::Into::<SimpleResponse>::into(response)
+                    .request_filter(session, ctx)
+                    .await?;
                 return Ok(true);
             }
         }
@@ -202,29 +198,22 @@ impl ProxyHttp for MotyaProxyService
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> Result<Box<HttpPeer>> {
-        
         static DEFAULT: PathAndQuery = PathAndQuery::from_static("/");
 
         match ctx.router.pick_peer(
-                &mut ContextInfo { selector_buf: &mut ctx.selector_buf }, 
-                &mut SessionInfo { 
-                    headers: session
-                        .req_header(),
-                    client_addr: session.client_addr(), 
-                    path: session
-                        .req_header()
-                        .uri
-                        .path_and_query()
-                        .unwrap_or(&DEFAULT)
-                }
-            )
-        {
-            Ok(Some(peer)) => {
-                Ok(Box::new(peer))
+            &mut ContextInfo {},
+            &mut SessionInfo {
+                headers: session.req_header(),
+                client_addr: session.client_addr(),
+                path: session
+                    .req_header()
+                    .uri
+                    .path_and_query()
+                    .unwrap_or(&DEFAULT),
             },
-            Ok(None) => {
-                Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404)))
-            }
+        ) {
+            Ok(Some(peer)) => Ok(Box::new(peer)),
+            Ok(None) => Err(pingora::Error::new(pingora::ErrorType::HTTPStatus(404))),
             Err(err) => {
                 let id = Uuid::new_v4();
 
@@ -248,19 +237,17 @@ impl ProxyHttp for MotyaProxyService
         header: &mut RequestHeader,
         ctx: &mut Self::CTX,
     ) -> Result<()> {
-
         let router = ctx.router.clone();
         let path = session.req_header().uri.path();
 
         if let Some(upstream_ctx) = router.get_upstream_by_path(path) {
-            
             for chain in &upstream_ctx.chains {
                 for filter in &chain.req_mods {
                     filter.upstream_request_filter(session, header, ctx).await?;
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -279,7 +266,6 @@ impl ProxyHttp for MotyaProxyService
         let path = session.req_header().uri.path();
 
         if let Some(upstream_ctx) = router.get_upstream_by_path(path) {
-            
             for chain in &upstream_ctx.chains {
                 for filter in &chain.res_mods {
                     filter.upstream_response_filter(session, upstream_response, ctx);
@@ -289,4 +275,3 @@ impl ProxyHttp for MotyaProxyService
         Ok(())
     }
 }
-

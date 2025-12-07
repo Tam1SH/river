@@ -1,31 +1,31 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr
-};
+use std::{collections::HashMap, net::SocketAddr};
 
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 
 use crate::{
     common_types::{
-        section_parser::SectionParser, bad::Bad, listeners::{
-            ListenerConfig, ListenerKind, Listeners, TlsConfig,
-        }
+        bad::Bad,
+        listeners::{ListenerConfig, ListenerKind, Listeners, TlsConfig},
+        section_parser::SectionParser,
     },
     kdl::utils::{self, HashMapValidationExt},
 };
 
 pub struct ListenersSection<'a> {
-    doc: &'a KdlDocument
+    doc: &'a KdlDocument,
 }
 
 impl SectionParser<KdlDocument, Listeners> for ListenersSection<'_> {
-
     fn parse_node(&self, node: &KdlDocument) -> miette::Result<Listeners> {
-        
         let listener_node = utils::required_child_doc(self.doc, node, "listeners")?;
         let listeners = utils::data_nodes(self.doc, listener_node)?;
         if listeners.is_empty() {
-            return Err(Bad::docspan("nonzero listeners required", self.doc, &listener_node.span()).into());
+            return Err(Bad::docspan(
+                "nonzero listeners required",
+                self.doc,
+                &listener_node.span(),
+            )
+            .into());
         }
 
         let mut list_cfgs = vec![];
@@ -39,8 +39,9 @@ impl SectionParser<KdlDocument, Listeners> for ListenersSection<'_> {
 }
 
 impl<'a> ListenersSection<'a> {
-    
-    pub fn new(doc: &'a KdlDocument) -> Self { Self { doc } }
+    pub fn new(doc: &'a KdlDocument) -> Self {
+        Self { doc }
+    }
 
     fn extract_listener(
         doc: &KdlDocument,
@@ -48,10 +49,8 @@ impl<'a> ListenersSection<'a> {
         name: &str,
         args: &[KdlEntry],
     ) -> miette::Result<ListenerConfig> {
-        
         // Is this a bindable name?
         if name.parse::<SocketAddr>().is_ok() {
-
             let args = utils::str_value_args(doc, args)?
                 .into_iter()
                 .collect::<HashMap<&str, &KdlEntry>>()
@@ -103,15 +102,20 @@ impl<'a> ListenersSection<'a> {
                     },
                 }),
             }
-        } 
+        }
         // else if let Ok(pb) = name.parse::<PathBuf>() {
         //     // TODO: Should we check that this path exists? Otherwise it seems to always match
         //     Ok(ListenerConfig {
         //         source: ListenerKind::Uds(pb),
         //     })
-        // } 
+        // }
         else {
-            Err(Bad::docspan(format!("'{name}' is not a socketaddr or path?"), doc, &node.span()).into())
+            Err(Bad::docspan(
+                format!("'{name}' is not a socketaddr or path?"),
+                doc,
+                &node.span(),
+            )
+            .into())
         }
     }
 }

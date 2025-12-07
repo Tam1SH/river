@@ -1,14 +1,13 @@
-use std::time::Duration;
 use http::StatusCode;
-use miette::{Context, IntoDiagnostic, Result, miette};
+use miette::{miette, Context, IntoDiagnostic, Result};
 use reqwest::Client;
+use std::time::Duration;
 
 use motya_config::common_types::definitions::PluginSource;
 
 pub struct PluginLoader;
 
 impl PluginLoader {
-
     fn client() -> Result<Client> {
         Client::builder()
             .timeout(Duration::from_secs(5))
@@ -17,7 +16,7 @@ impl PluginLoader {
             .into_diagnostic()
     }
 
-   pub async fn check_availability(source: &PluginSource) -> Result<()> {
+    pub async fn check_availability(source: &PluginSource) -> Result<()> {
         match source {
             PluginSource::File(path) => {
                 if !path.exists() {
@@ -30,8 +29,9 @@ impl PluginLoader {
             }
             PluginSource::Url(url) => {
                 let client = Self::client()?;
-                
-                let response = client.head(url)
+
+                let response = client
+                    .head(url)
                     .send()
                     .await
                     .into_diagnostic()
@@ -39,8 +39,8 @@ impl PluginLoader {
 
                 if response.status() != StatusCode::OK {
                     return Err(miette!(
-                        "Plugin URL {} is unreachable. Status: {}", 
-                        url, 
+                        "Plugin URL {} is unreachable. Status: {}",
+                        url,
                         response.status()
                     ));
                 }
@@ -62,15 +62,14 @@ impl PluginLoader {
 
     pub async fn fetch_bytes(source: &PluginSource) -> Result<Vec<u8>> {
         match source {
-            PluginSource::File(path) => {
-                tokio::fs::read(path)
-                    .await
-                    .into_diagnostic()
-                    .wrap_err_with(|| format!("Failed to read file {:?}", path))
-            }
+            PluginSource::File(path) => tokio::fs::read(path)
+                .await
+                .into_diagnostic()
+                .wrap_err_with(|| format!("Failed to read file {:?}", path)),
             PluginSource::Url(url) => {
                 let client = Self::client()?;
-                let response = client.get(url)
+                let response = client
+                    .get(url)
                     .send()
                     .await
                     .into_diagnostic()

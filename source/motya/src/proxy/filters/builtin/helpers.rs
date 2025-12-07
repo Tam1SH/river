@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
-use pingora::{Result, Error};
-
+use pingora::{Error, Result};
 
 /// Helper function that extracts the value of a given key.
 ///

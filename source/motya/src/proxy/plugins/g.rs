@@ -1,3 +1,3 @@
-wasmtime::component::bindgen!({ 
+wasmtime::component::bindgen!({
     world: "app",
 });

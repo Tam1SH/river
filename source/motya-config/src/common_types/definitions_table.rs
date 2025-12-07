@@ -2,7 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use fqdn::FQDN;
 
-use crate::common_types::{builtin_filters_name::load_definitions_table, definitions::{FilterChain, KeyTemplateConfig, PluginDefinition}};
+use crate::common_types::{
+    builtin_filters_name::load_definitions_table,
+    definitions::{FilterChain, KeyTemplateConfig, PluginDefinition},
+};
 
 /// Definitions Table (Intermediate Representation).
 ///
@@ -59,16 +62,19 @@ pub struct DefinitionsTable {
     key_templates: HashMap<String, KeyTemplateConfig>,
 }
 
-
 impl DefinitionsTable {
-
     pub fn new(
         available_filters: HashSet<FQDN>,
         chains: HashMap<String, FilterChain>,
         plugins: HashMap<FQDN, PluginDefinition>,
-        key_profiles: HashMap<String, KeyTemplateConfig>
+        key_profiles: HashMap<String, KeyTemplateConfig>,
     ) -> Self {
-        Self { available_filters, chains, plugins, key_templates: key_profiles }
+        Self {
+            available_filters,
+            chains,
+            plugins,
+            key_templates: key_profiles,
+        }
     }
 
     pub fn new_with_global() -> Self {
@@ -78,8 +84,12 @@ impl DefinitionsTable {
     pub fn get_chain_by_name(&self, name: &str) -> Option<FilterChain> {
         self.chains.get(name).cloned()
     }
-    
-    pub fn insert_key_profile(&mut self, name: String, profile: KeyTemplateConfig) -> Option<KeyTemplateConfig> {
+
+    pub fn insert_key_profile(
+        &mut self,
+        name: String,
+        profile: KeyTemplateConfig,
+    ) -> Option<KeyTemplateConfig> {
         self.key_templates.insert(name, profile)
     }
 
@@ -87,45 +97,64 @@ impl DefinitionsTable {
         self.available_filters.insert(filter_name)
     }
 
-    pub fn insert_plugin(&mut self, name: FQDN, plugin: PluginDefinition) -> Option<PluginDefinition> {
+    pub fn insert_plugin(
+        &mut self,
+        name: FQDN,
+        plugin: PluginDefinition,
+    ) -> Option<PluginDefinition> {
         self.plugins.insert(name, plugin)
     }
 
-    pub fn insert_chain(&mut self, name: impl Into<String>, chain: FilterChain) -> Option<FilterChain> {
+    pub fn insert_chain(
+        &mut self,
+        name: impl Into<String>,
+        chain: FilterChain,
+    ) -> Option<FilterChain> {
         self.chains.insert(name.into(), chain)
     }
-    
+
     pub fn extend_chain(&mut self, chains: HashMap<String, FilterChain>) {
         self.chains.extend(chains);
     }
 
-    pub fn get_plugins(&self) -> &HashMap<FQDN, PluginDefinition> { &self.plugins }
-    pub fn get_available_filters(&self) -> &HashSet<FQDN> { &self.available_filters }
-    pub fn get_chains(&self) -> &HashMap<String, FilterChain> { &self.chains }
-    pub fn get_key_templates(&self) -> &HashMap<String, KeyTemplateConfig> { &self.key_templates }
+    pub fn get_plugins(&self) -> &HashMap<FQDN, PluginDefinition> {
+        &self.plugins
+    }
+    pub fn get_available_filters(&self) -> &HashSet<FQDN> {
+        &self.available_filters
+    }
+    pub fn get_chains(&self) -> &HashMap<String, FilterChain> {
+        &self.chains
+    }
+    pub fn get_key_templates(&self) -> &HashMap<String, KeyTemplateConfig> {
+        &self.key_templates
+    }
 
     pub fn merge(&mut self, other: DefinitionsTable) -> miette::Result<()> {
-        
         for filter in other.available_filters {
             self.available_filters.insert(filter);
         }
 
         for (name, chain) in other.chains {
             if self.chains.contains_key(&name) {
-                
-                return Err(miette::miette!("Duplicate chain definition across files: '{}'", name));
+                return Err(miette::miette!(
+                    "Duplicate chain definition across files: '{}'",
+                    name
+                ));
             }
             self.chains.insert(name, chain);
         }
-        
+
         for (name, plugin) in other.plugins {
             if self.plugins.contains_key(&name) {
-                return Err(miette::miette!("Duplicate plugin definition across files: '{}'", name));
+                return Err(miette::miette!(
+                    "Duplicate plugin definition across files: '{}'",
+                    name
+                ));
             }
             self.plugins.insert(name, plugin);
         }
 
         Ok(())
     }
-
 }

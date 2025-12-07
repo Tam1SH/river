@@ -1,10 +1,14 @@
-use std::collections::{BTreeMap, HashMap};
 use fqdn::FQDN;
 use pingora::{Error, ErrorType, Result};
+use std::collections::{BTreeMap, HashMap};
 
 use crate::proxy::{
-    RequestFilterMod, RequestModifyMod, ResponseModifyMod, plugins::module::WasmModule,
+    plugins::module::WasmModule,
+    RequestFilterMod,
+    RequestModifyMod,
+    ResponseModifyMod,
 };
+
 
 pub enum FilterInstance {
     Action(Box<dyn RequestFilterMod>),
@@ -15,10 +19,11 @@ pub enum FilterInstance {
 #[allow(clippy::large_enum_variant)]
 pub enum RegistryFilterContainer {
     Builtin(FilterInstance),
-    Plugin(WasmModule)
+    Plugin(WasmModule),
 }
 
-type FiltersContainerFactoryFn = Box<dyn Fn(BTreeMap<String, String>) -> Result<RegistryFilterContainer> + Send + Sync>;
+type FiltersContainerFactoryFn =
+    Box<dyn Fn(BTreeMap<String, String>) -> Result<RegistryFilterContainer> + Send + Sync>;
 
 /// The central repository for all available filter blueprints (factories).
 ///
@@ -46,9 +51,14 @@ impl FilterRegistry {
         }
     }
 
-    pub fn build(&self, name: &FQDN, settings: BTreeMap<String, String>) -> Result<RegistryFilterContainer> {
+    pub fn build(
+        &self,
+        name: &FQDN,
+        settings: BTreeMap<String, String>,
+    ) -> Result<RegistryFilterContainer> {
         let factory = self.factories.get(name).ok_or_else(|| {
-            Error::new(ErrorType::Custom("Filter is not registered in the binary")).more_context(format!("filter name: '{name}'"))
+            Error::new(ErrorType::Custom("Filter is not registered in the binary"))
+                .more_context(format!("filter name: '{name}'"))
         })?;
 
         factory(settings)
@@ -59,8 +69,6 @@ impl FilterRegistry {
     }
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, HashMap};
@@ -69,17 +77,19 @@ mod tests {
 
     use async_trait::async_trait;
 
+    use crate::proxy::filters::chain_resolver::ChainResolver;
+    use crate::proxy::filters::generate_registry::load_registry;
+    use crate::proxy::filters::registry::{
+        FilterInstance, FilterRegistry, RegistryFilterContainer,
+    };
+    use crate::proxy::MotyaContext;
+    use crate::proxy::{RequestFilterMod, RequestModifyMod};
     use fqdn::FQDN;
+    use motya_config::common_types::definitions::{ConfiguredFilter, FilterChain};
     use motya_config::common_types::definitions_table::DefinitionsTable;
     use pingora::Result;
     use pingora_proxy::Session;
-    use motya_config::common_types::definitions::{ConfiguredFilter, FilterChain};
-    use crate::proxy::MotyaContext;
-    use crate::proxy::filters::chain_resolver::ChainResolver;
-    use crate::proxy::filters::generate_registry::load_registry;
-    use crate::proxy::filters::registry::{FilterInstance, FilterRegistry, RegistryFilterContainer};
-    use crate::proxy::{RequestModifyMod, RequestFilterMod};
-    
+
     struct MockHeaderFilter;
 
     impl MockHeaderFilter {
@@ -92,58 +102,84 @@ mod tests {
 
     #[async_trait]
     impl RequestModifyMod for MockHeaderFilter {
-        async fn upstream_request_filter(&self, _s: &mut Session, _h: &mut pingora_http::RequestHeader, _ctx: &mut MotyaContext) -> Result<()> { Ok(()) }
+        async fn upstream_request_filter(
+            &self,
+            _s: &mut Session,
+            _h: &mut pingora_http::RequestHeader,
+            _ctx: &mut MotyaContext,
+        ) -> Result<()> {
+            Ok(())
+        }
     }
 
     struct MockBlockFilter;
 
     impl MockBlockFilter {
-        fn from_settings(_: BTreeMap<String, String>) -> Result<Self> { Ok(Self) }
+        fn from_settings(_: BTreeMap<String, String>) -> Result<Self> {
+            Ok(Self)
+        }
     }
 
     #[async_trait]
     impl RequestFilterMod for MockBlockFilter {
-        async fn request_filter(&self, _s: &mut Session, _ctx: &mut MotyaContext) -> Result<bool> { Ok(false) }
+        async fn request_filter(&self, _s: &mut Session, _ctx: &mut MotyaContext) -> Result<bool> {
+            Ok(false)
+        }
     }
 
     fn setup_registry() -> FilterRegistry {
         let mut reg = FilterRegistry::new();
-        
-        reg.register_factory(FQDN::from_str("motya.req.add_header").unwrap(), Box::new(|s| {
-            let f = MockHeaderFilter::from_settings(s)?;
-            Ok(RegistryFilterContainer::Builtin(FilterInstance::Request(Box::new(f))))
-        }));
-        
-        reg.register_factory(FQDN::from_str("motya.sec.block").unwrap(), Box::new(|s| {
-            let f = MockBlockFilter::from_settings(s)?;
-            Ok(RegistryFilterContainer::Builtin(FilterInstance::Action(Box::new(f))))
-        }));
-        
+
+        reg.register_factory(
+            FQDN::from_str("motya.req.add_header").unwrap(),
+            Box::new(|s| {
+                let f = MockHeaderFilter::from_settings(s)?;
+                Ok(RegistryFilterContainer::Builtin(FilterInstance::Request(
+                    Box::new(f),
+                )))
+            }),
+        );
+
+        reg.register_factory(
+            FQDN::from_str("motya.sec.block").unwrap(),
+            Box::new(|s| {
+                let f = MockBlockFilter::from_settings(s)?;
+                Ok(RegistryFilterContainer::Builtin(FilterInstance::Action(
+                    Box::new(f),
+                )))
+            }),
+        );
+
         reg
     }
 
-     #[test]
+    #[test]
     fn test_builtin_filters_population() {
-        
         let mut definitions = DefinitionsTable::default();
-        
-        
+
         assert!(definitions.get_available_filters().is_empty());
 
-        
         let _registry = load_registry(&mut definitions);
-        
-        assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.filters.block-cidr-range").unwrap()));
-        assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.response.upsert-header").unwrap()));
-        assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.response.remove-header").unwrap()));
-        assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.request.upsert-header").unwrap()));
-        assert!(definitions.get_available_filters().contains(&FQDN::from_str("motya.request.remove-header").unwrap()));
-    }
 
+        assert!(definitions
+            .get_available_filters()
+            .contains(&FQDN::from_str("motya.filters.block-cidr-range").unwrap()));
+        assert!(definitions
+            .get_available_filters()
+            .contains(&FQDN::from_str("motya.response.upsert-header").unwrap()));
+        assert!(definitions
+            .get_available_filters()
+            .contains(&FQDN::from_str("motya.response.remove-header").unwrap()));
+        assert!(definitions
+            .get_available_filters()
+            .contains(&FQDN::from_str("motya.request.upsert-header").unwrap()));
+        assert!(definitions
+            .get_available_filters()
+            .contains(&FQDN::from_str("motya.request.remove-header").unwrap()));
+    }
 
     #[tokio::test]
     async fn test_compile_success() {
-        
         let mut definitions_table = DefinitionsTable::default();
 
         // Register available definitions (emulating `def name="..."`)
@@ -166,62 +202,83 @@ mod tests {
             },
         ];
 
-        definitions_table.insert_chain(
-            "main_pipeline".to_string(),
-            FilterChain { filters }
-        );
+        definitions_table.insert_chain("main_pipeline".to_string(), FilterChain { filters });
 
         let registry = setup_registry();
 
-        let resolver = ChainResolver::new(definitions_table, Arc::new(registry.into())).await.unwrap();
-        
-        let chain = resolver.resolve("main_pipeline").await.expect("Chain not found");
-        
-        assert_eq!(chain.actions.len(), 1, "Should have 1 action filter (block)");
-        assert_eq!(chain.req_mods.len(), 1, "Should have 1 request modifier (add_header)");
+        let resolver = ChainResolver::new(definitions_table, Arc::new(registry.into()))
+            .await
+            .unwrap();
+
+        let chain = resolver
+            .resolve("main_pipeline")
+            .await
+            .expect("Chain not found");
+
+        assert_eq!(
+            chain.actions.len(),
+            1,
+            "Should have 1 action filter (block)"
+        );
+        assert_eq!(
+            chain.req_mods.len(),
+            1,
+            "Should have 1 request modifier (add_header)"
+        );
         assert_eq!(chain.res_mods.len(), 0, "Should have 0 response modifiers");
     }
 
     #[tokio::test]
     async fn test_compile_fail_unknown_definition() {
-        
         let mut definitions_table = DefinitionsTable::default();
 
         definitions_table.insert_filter(FQDN::from_str("motya.unknown_thing").unwrap());
 
-        
         let registry = setup_registry();
 
         let res = ChainResolver::new(definitions_table, Arc::new(registry.into())).await;
-        
+
         assert!(res.is_err());
         let err_msg = res.err().unwrap().to_string();
-        
+
         assert!(
             err_msg.contains("Filter 'motya.unknown_thing' is defined but not registered"),
-            "Unexpected error message: {}", err_msg
+            "Unexpected error message: {}",
+            err_msg
         );
     }
 
     #[tokio::test]
     async fn test_instantiation_failure() {
         let mut reg = FilterRegistry::new();
-        reg.register_factory(FQDN::from_str("motya.always_fail").unwrap(), Box::new(|_| {
-            Err(pingora::Error::new(pingora::ErrorType::Custom("Init failed")))
-        }));
-        
+        reg.register_factory(
+            FQDN::from_str("motya.always_fail").unwrap(),
+            Box::new(|_| {
+                Err(pingora::Error::new(pingora::ErrorType::Custom(
+                    "Init failed",
+                )))
+            }),
+        );
+
         let mut table = DefinitionsTable::default();
         table.insert_filter(FQDN::from_str("motya.always_fail").unwrap());
-        table.insert_chain("test", FilterChain {
-            filters: vec![ConfiguredFilter {
-                name: FQDN::from_str("motya.always_fail").unwrap(),
-                args: HashMap::new()
-            }]
-        });
+        table.insert_chain(
+            "test",
+            FilterChain {
+                filters: vec![ConfiguredFilter {
+                    name: FQDN::from_str("motya.always_fail").unwrap(),
+                    args: HashMap::new(),
+                }],
+            },
+        );
 
-        let resolver = ChainResolver::new(table, Arc::new(reg.into())).await.unwrap();
+        let resolver = ChainResolver::new(table, Arc::new(reg.into()))
+            .await
+            .unwrap();
         let err = resolver.resolve("test").await.err().unwrap();
 
-        assert!(err.to_string().contains("Failed to build filter 'motya.always_fail' in chain 'test'"));
+        assert!(err
+            .to_string()
+            .contains("Failed to build filter 'motya.always_fail' in chain 'test'"));
     }
 }

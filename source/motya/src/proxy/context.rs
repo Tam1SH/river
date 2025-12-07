@@ -6,16 +6,13 @@ use pingora_http::RequestHeader;
 use crate::proxy::balancer::key_selector::KeySourceContext;
 use pingora::protocols::l4::socket::SocketAddr;
 
-
 pub struct SessionInfo<'a> {
     pub headers: &'a RequestHeader,
     pub client_addr: Option<&'a SocketAddr>,
-    pub path: &'a PathAndQuery
+    pub path: &'a PathAndQuery,
 }
 
-pub struct ContextInfo<'a> {
-    pub selector_buf: &'a mut Vec<u8>
-}
+pub struct ContextInfo {}
 
 impl KeySourceContext for SessionInfo<'_> {
     fn get_path(&self) -> &PathAndQuery {
@@ -25,10 +22,10 @@ impl KeySourceContext for SessionInfo<'_> {
     fn get_cookie(&self, name: &str) -> Option<&str> {
         for header_value in self.headers.headers.get_all("cookie") {
             let s = header_value.to_str().ok()?;
-            
+
             for part in s.split(';') {
                 let part = part.trim();
-                
+
                 if let Some(rest) = part.strip_prefix(name) {
                     if let Some(value) = rest.strip_prefix('=') {
                         return Some(value);

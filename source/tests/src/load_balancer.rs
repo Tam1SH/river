@@ -1,15 +1,11 @@
-use std::fs::File;
-use std::io::Write;
-use std::net::TcpListener;
-use std::thread;
-use std::time::Duration;
+use std::{io::Write, net::TcpListener, thread, time::Duration};
 
-use motya::app_context::AppContext;
-use motya_config::cli::cli::{Cli, Commands};
 use reqwest::Client;
 use tempfile::NamedTempFile;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{matchers::method, Mock, MockServer, ResponseTemplate};
+
+use motya::app_context::AppContext;
+use motya_config::cli::cli_struct::Cli;
 
 const LB_CONFIG_TEMPLATE: &str = r#"
 services {
@@ -45,7 +41,7 @@ fn get_free_port() -> u16 {
 async fn wait_for_proxy(url: &str) {
     let client = Client::new();
     let start = std::time::Instant::now();
-    
+
     while start.elapsed() < Duration::from_secs(5) {
         if client.get(url).send().await.is_ok() {
             return;
@@ -57,12 +53,10 @@ async fn wait_for_proxy(url: &str) {
 
 #[tokio::test]
 async fn test_load_balancer_round_robin_distribution() {
-    
     let backend1 = MockServer::start().await;
     let backend2 = MockServer::start().await;
     let backend3 = MockServer::start().await;
 
-    
     let mock_response = ResponseTemplate::new(200).set_body_string("OK");
     Mock::given(method("GET"))
         .respond_with(mock_response.clone())
@@ -77,32 +71,29 @@ async fn test_load_balancer_round_robin_distribution() {
         .mount(&backend3)
         .await;
 
-        
     let proxy_port = get_free_port();
-    
-    
+
     let addr1 = backend1.address();
     let addr2 = backend2.address();
     let addr3 = backend3.address();
-    
+
     let b1_str = format!("{}:{}", addr1.ip(), addr1.port());
     let b2_str = format!("{}:{}", addr2.ip(), addr2.port());
     let b3_str = format!("{}:{}", addr3.ip(), addr3.port());
-    
+
     let config_content = LB_CONFIG_TEMPLATE
         .replace("__PROXY_PORT__", &proxy_port.to_string())
         .replace("__BACKEND_1__", &b1_str)
         .replace("__BACKEND_2__", &b2_str)
         .replace("__BACKEND_3__", &b3_str);
-    
+
     let mut config_file = NamedTempFile::new().expect("Failed to create temp config file");
     write!(config_file, "{}", config_content).expect("Failed to write config content");
     let config_path = config_file.path().to_path_buf();
 
-    
     let cli = Cli {
         validate_configs: false,
-        threads_per_service: None, 
+        threads_per_service: None,
         config_toml: None,
         config_entry: Some(config_path),
         daemonize: false,
@@ -112,14 +103,18 @@ async fn test_load_balancer_round_robin_distribution() {
         command: None,
     };
 
-    let mut app_ctx = AppContext::bootstrap(cli).await.expect("Failed to bootstrap AppContext");
-    let services = app_ctx.build_services().await.expect("Failed to build services");
-    
+    let mut app_ctx = AppContext::bootstrap(cli)
+        .await
+        .expect("Failed to bootstrap AppContext");
+    let services = app_ctx
+        .build_services()
+        .await
+        .expect("Failed to build services");
+
     let (mut server, _watcher) = app_ctx.ready();
     server.add_services(services);
     server.bootstrap();
 
-    
     thread::spawn(move || {
         server.run_forever();
     });
@@ -127,10 +122,10 @@ async fn test_load_balancer_round_robin_distribution() {
     let proxy_url = format!("http://127.0.0.1:{}", proxy_port);
     wait_for_proxy(&proxy_url).await;
 
-    
     let client = Client::new();
-    for i in 0..30 {
-        client.get(&proxy_url)
+    for _ in 0..30 {
+        client
+            .get(&proxy_url)
             .header("X-Test-Req", "true")
             .send()
             .await
@@ -138,7 +133,8 @@ async fn test_load_balancer_round_robin_distribution() {
     }
 
     fn count_test_requests(requests: &[wiremock::Request]) -> usize {
-        requests.iter()
+        requests
+            .iter()
             .filter(|r| r.headers.contains_key("x-test-req"))
             .count()
     }

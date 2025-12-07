@@ -5,9 +5,16 @@ use kdl::{KdlDocument, KdlEntry, KdlNode};
 
 use crate::{
     common_types::{
-        bad::Bad, definitions::{HashAlgorithm, KeyTemplateConfig, PluginDefinition, PluginSource, Transform}, definitions_table::DefinitionsTable, section_parser::SectionParser
+        bad::Bad,
+        definitions::{KeyTemplateConfig, PluginDefinition, PluginSource},
+        definitions_table::DefinitionsTable,
+        section_parser::SectionParser,
     },
-    kdl::{chain_parser::ChainParser, key_profile_parser::KeyProfileParser, utils::{self, HashMapValidationExt}},
+    kdl::{
+        chain_parser::ChainParser,
+        key_profile_parser::KeyProfileParser,
+        utils::{self, HashMapValidationExt},
+    },
 };
 
 pub struct DefinitionsSection<'a> {
@@ -16,7 +23,6 @@ pub struct DefinitionsSection<'a> {
 
 impl SectionParser<KdlDocument, DefinitionsTable> for DefinitionsSection<'_> {
     fn parse_node(&self, node: &KdlDocument) -> miette::Result<DefinitionsTable> {
-        
         self.extract_definitions(node)
     }
 }
@@ -53,19 +59,20 @@ impl<'a> DefinitionsSection<'a> {
         Ok(table)
     }
 
-      fn parse_key_profiles(
+    fn parse_key_profiles(
         &self,
         table: &mut DefinitionsTable,
         node: &KdlDocument,
     ) -> miette::Result<()> {
         let nodes = utils::data_nodes(self.doc, node)?;
-        
+
         for (node, name, args) in nodes {
             match name {
                 "namespace" => {
-                    let ns_name = utils::extract_one_str_arg(
-                        self.doc, node, "namespace", args, |s| Some(s.to_string())
-                    )?;
+                    let ns_name =
+                        utils::extract_one_str_arg(self.doc, node, "namespace", args, |s| {
+                            Some(s.to_string())
+                        })?;
                     self.parse_key_profile_namespace(table, node, &ns_name)?;
                 }
                 "template" => {
@@ -75,18 +82,22 @@ impl<'a> DefinitionsSection<'a> {
                             format!("Duplicate key template: '{}'", name),
                             self.doc,
                             &node.span(),
-                        ).into());
+                        )
+                        .into());
                     }
                     table.insert_key_profile(name.clone(), template);
                 }
-                _ => return Err(Bad::docspan(
-                    format!("Unknown directive in key-profiles: '{name}'"),
-                    self.doc,
-                    &node.span(),
-                ).into()),
+                _ => {
+                    return Err(Bad::docspan(
+                        format!("Unknown directive in key-profiles: '{name}'"),
+                        self.doc,
+                        &node.span(),
+                    )
+                    .into())
+                }
             }
         }
-        
+
         Ok(())
     }
 
@@ -96,18 +107,19 @@ impl<'a> DefinitionsSection<'a> {
         node: &KdlNode,
         prefix: &str,
     ) -> miette::Result<()> {
-        let children_doc = node.children().ok_or_else(|| {
-            Bad::docspan("namespace must have children", self.doc, &node.span())
-        })?;
+        let children_doc = node
+            .children()
+            .ok_or_else(|| Bad::docspan("namespace must have children", self.doc, &node.span()))?;
 
         let nodes = utils::data_nodes(self.doc, children_doc)?;
 
         for (child_node, name, args) in nodes {
             match name {
                 "namespace" => {
-                    let sub_name = utils::extract_one_str_arg(
-                        self.doc, child_node, "namespace", args, |s| Some(s.to_string())
-                    )?;
+                    let sub_name =
+                        utils::extract_one_str_arg(self.doc, child_node, "namespace", args, |s| {
+                            Some(s.to_string())
+                        })?;
                     let new_prefix = if prefix.is_empty() {
                         sub_name
                     } else {
@@ -116,21 +128,26 @@ impl<'a> DefinitionsSection<'a> {
                     self.parse_key_profile_namespace(table, child_node, &new_prefix)?;
                 }
                 "template" => {
-                    let (name, template) = self.parse_key_profile_template(child_node, args, prefix)?;
+                    let (name, template) =
+                        self.parse_key_profile_template(child_node, args, prefix)?;
                     if table.get_key_templates().contains_key(&name) {
                         return Err(Bad::docspan(
                             format!("Duplicate key template: '{}'", name),
                             self.doc,
                             &child_node.span(),
-                        ).into());
+                        )
+                        .into());
                     }
                     table.insert_key_profile(name.clone(), template);
                 }
-                _ => return Err(Bad::docspan(
-                    format!("Unknown directive in key-profile namespace: '{name}'"),
-                    self.doc,
-                    &child_node.span(),
-                ).into()),
+                _ => {
+                    return Err(Bad::docspan(
+                        format!("Unknown directive in key-profile namespace: '{name}'"),
+                        self.doc,
+                        &child_node.span(),
+                    )
+                    .into())
+                }
             }
         }
 
@@ -143,9 +160,8 @@ impl<'a> DefinitionsSection<'a> {
         args: &[KdlEntry],
         namespace_prefix: &str,
     ) -> miette::Result<(String, KeyTemplateConfig)> {
-        let template_name = utils::extract_one_str_arg(
-            self.doc, node, "template", args, |s| Some(s.to_string())
-        )?;
+        let template_name =
+            utils::extract_one_str_arg(self.doc, node, "template", args, |s| Some(s.to_string()))?;
 
         let full_name = if namespace_prefix.is_empty() {
             template_name
@@ -155,9 +171,9 @@ impl<'a> DefinitionsSection<'a> {
 
         let children = node.children().ok_or_else(|| {
             Bad::docspan(
-                "template block must have children (e.g. { ... })", 
-                self.doc, 
-                &node.span()
+                "template block must have children (e.g. { ... })",
+                self.doc,
+                &node.span(),
             )
         })?;
 
@@ -166,41 +182,60 @@ impl<'a> DefinitionsSection<'a> {
         Ok((full_name, key_template))
     }
 
-    fn parse_modifiers(&self, table: &mut DefinitionsTable, node: &KdlDocument) -> miette::Result<()> {
+    fn parse_modifiers(
+        &self,
+        table: &mut DefinitionsTable,
+        node: &KdlDocument,
+    ) -> miette::Result<()> {
         let nodes = utils::data_nodes(self.doc, node)?;
         for (node, name, args) in nodes {
             match name {
                 "namespace" => {
-                    let ns_name = utils::extract_one_str_arg(
-                        self.doc, node, "namespace", args, |s| Some(s.to_string())
-                    ).map_err(|_| {
-                        Bad::docspan(
-                            "Expected a valid name string argument after 'namespace'",
-                            self.doc,
-                            &node.span(),
-                        )
-                    })?;
+                    let ns_name =
+                        utils::extract_one_str_arg(self.doc, node, "namespace", args, |s| {
+                            Some(s.to_string())
+                        })
+                        .map_err(|_| {
+                            Bad::docspan(
+                                "Expected a valid name string argument after 'namespace'",
+                                self.doc,
+                                &node.span(),
+                            )
+                        })?;
                     self.parse_namespace_recursive(table, node, &ns_name)?;
                 }
                 "chain-filters" => {
-                    let chain_name = utils::extract_one_str_arg(
-                        self.doc, node, "chain-filters", args, |s| Some(s.to_string())
-                    ).map_err(|_| {
-                        Bad::docspan(
-                            "Expected a valid name string argument after 'chain-filters'",
-                            self.doc,
-                            &node.span(),
-                        )
-                    })?;
+                    let chain_name =
+                        utils::extract_one_str_arg(self.doc, node, "chain-filters", args, |s| {
+                            Some(s.to_string())
+                        })
+                        .map_err(|_| {
+                            Bad::docspan(
+                                "Expected a valid name string argument after 'chain-filters'",
+                                self.doc,
+                                &node.span(),
+                            )
+                        })?;
                     self.parse_chain(table, node, chain_name)?;
                 }
-                _ => return Err(Bad::docspan(format!("Unknown directive: '{name}'"), self.doc, &node.span()).into()),
+                _ => {
+                    return Err(Bad::docspan(
+                        format!("Unknown directive: '{name}'"),
+                        self.doc,
+                        &node.span(),
+                    )
+                    .into())
+                }
             }
         }
         Ok(())
     }
 
-    fn parse_plugins(&self, table: &mut DefinitionsTable, node: &KdlDocument) -> miette::Result<()> {
+    fn parse_plugins(
+        &self,
+        table: &mut DefinitionsTable,
+        node: &KdlDocument,
+    ) -> miette::Result<()> {
         let nodes = utils::data_nodes(self.doc, node)?;
 
         for (plugin_node, name, _) in nodes {
@@ -209,7 +244,8 @@ impl<'a> DefinitionsSection<'a> {
                     format!("Expected 'plugin', found '{name}'"),
                     self.doc,
                     &plugin_node.span(),
-                ).into());
+                )
+                .into());
             }
 
             let plugin_def = self.parse_single_plugin(plugin_node)?;
@@ -219,7 +255,8 @@ impl<'a> DefinitionsSection<'a> {
                     format!("Duplicate plugin definition: '{}'", plugin_def.name),
                     self.doc,
                     &plugin_node.span(),
-                ).into());
+                )
+                .into());
             }
 
             table.insert_plugin(plugin_def.name.clone(), plugin_def);
@@ -234,21 +271,27 @@ impl<'a> DefinitionsSection<'a> {
         })?;
 
         let nodes = utils::data_nodes(self.doc, children)?;
-        
+
         let mut name: Option<String> = None;
         let mut source: Option<PluginSource> = None;
 
         for (child_node, child_name, args) in nodes {
             match child_name {
                 "name" => {
-                    let val = utils::extract_one_str_arg(
-                        self.doc, child_node, "name", args, |s| Some(s.to_string())
-                    )?;
+                    let val =
+                        utils::extract_one_str_arg(self.doc, child_node, "name", args, |s| {
+                            Some(s.to_string())
+                        })?;
                     name = Some(val);
                 }
                 "load" => {
                     if source.is_some() {
-                        return Err(Bad::docspan("Duplicate 'load' directive", self.doc, &child_node.span()).into());
+                        return Err(Bad::docspan(
+                            "Duplicate 'load' directive",
+                            self.doc,
+                            &child_node.span(),
+                        )
+                        .into());
                     }
 
                     let args_map = utils::str_str_args(self.doc, args)?
@@ -265,7 +308,8 @@ impl<'a> DefinitionsSection<'a> {
                             "'load' must provide either 'path' or 'url'",
                             self.doc,
                             &child_node.span(),
-                        ).into());
+                        )
+                        .into());
                     }
                 }
                 _ => {
@@ -273,56 +317,73 @@ impl<'a> DefinitionsSection<'a> {
                         format!("Unknown plugin property: '{child_name}'"),
                         self.doc,
                         &child_node.span(),
-                    ).into());
+                    )
+                    .into());
                 }
             }
         }
 
-        let name = FQDN::from_str(&name
-            .ok_or_else(|| Bad::docspan("Plugin must have a 'name'", self.doc, &node.span()))?)
-            .map_err(|err| Bad::docspan(format!("Plugin name must be a valid FQDN, err: '{err}'"), self.doc, &node.span()))?;
-        let source = source.ok_or_else(|| Bad::docspan("Plugin must have a 'load' directive", self.doc, &node.span()))?;
+        let name =
+            FQDN::from_str(&name.ok_or_else(|| {
+                Bad::docspan("Plugin must have a 'name'", self.doc, &node.span())
+            })?)
+            .map_err(|err| {
+                Bad::docspan(
+                    format!("Plugin name must be a valid FQDN, err: '{err}'"),
+                    self.doc,
+                    &node.span(),
+                )
+            })?;
+        let source = source.ok_or_else(|| {
+            Bad::docspan(
+                "Plugin must have a 'load' directive",
+                self.doc,
+                &node.span(),
+            )
+        })?;
 
         Ok(PluginDefinition { name, source })
     }
-    
+
     fn parse_namespace_recursive(
         &self,
         table: &mut DefinitionsTable,
         node: &KdlNode,
         prefix: &str,
     ) -> miette::Result<()> {
-        let children_doc = node.children().ok_or_else(|| {
-            Bad::docspan(
-                "namespace must have children",
-                self.doc,
-                &node.span(),
-            )
-        })?;
+        let children_doc = node
+            .children()
+            .ok_or_else(|| Bad::docspan("namespace must have children", self.doc, &node.span()))?;
 
         let nodes = utils::data_nodes(self.doc, children_doc)?;
 
         for (child_node, name, args) in nodes {
             match name {
                 "namespace" => {
-                    let sub_name = utils::extract_one_str_arg(
-                        self.doc, child_node, "namespace", args, |s| Some(s.to_string())
-                    )?;
+                    let sub_name =
+                        utils::extract_one_str_arg(self.doc, child_node, "namespace", args, |s| {
+                            Some(s.to_string())
+                        })?;
                     let new_prefix = format!("{}.{}", prefix, sub_name);
                     self.parse_namespace_recursive(table, child_node, &new_prefix)?;
                 }
                 "def" => {
-                    
                     let def_name = utils::str_str_args(self.doc, args)?
                         .into_iter()
                         .collect::<HashMap<&str, &str>>()
                         .ensure_only_keys(&["name"], self.doc, child_node)?
                         .get("name")
-                        .ok_or_else(|| Bad::docspan("def requires 'name' argument", self.doc, &child_node.span()))?
+                        .ok_or_else(|| {
+                            Bad::docspan(
+                                "def requires 'name' argument",
+                                self.doc,
+                                &child_node.span(),
+                            )
+                        })?
                         .to_string();
 
                     let fqdn = FQDN::from_str(&format!("{}.{}", prefix, def_name))
-                        .map_err(|err| 
+                        .map_err(|err|
                             Bad::docspan(format!("prefix('{prefix}') or def name('{def_name}') not valid FQDN, err: '{err}'"), self.doc, &child_node.span())
                         )?;
 
@@ -365,17 +426,13 @@ impl<'a> DefinitionsSection<'a> {
         }
 
         let children_doc = node.children().ok_or_else(|| {
-            Bad::docspan(
-                "chain-filters must have children",
-                self.doc,
-                &node.span(),
-            )
+            Bad::docspan("chain-filters must have children", self.doc, &node.span())
         })?;
 
         let chain = ChainParser::parse(self.doc, children_doc)?;
 
         table.insert_chain(chain_name, chain);
-        
+
         Ok(())
     }
 }
@@ -384,7 +441,7 @@ impl<'a> DefinitionsSection<'a> {
 mod tests {
     use super::*;
     use kdl::KdlDocument;
-    
+
     const VALID_BASIC_PROFILE: &str = r#"
     definitions {
         key-profiles {
@@ -399,9 +456,14 @@ mod tests {
     fn test_minimal_valid_profile() {
         let doc: KdlDocument = VALID_BASIC_PROFILE.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
-        let table = parser.parse_node(&doc).expect("Should parse minimal profile");
-        
-        let key_template = table.get_key_templates().get("basic").expect("Profile should exist");
+        let table = parser
+            .parse_node(&doc)
+            .expect("Should parse minimal profile");
+
+        let key_template = table
+            .get_key_templates()
+            .get("basic")
+            .expect("Profile should exist");
         assert_eq!(key_template.source, "${cookie_session}");
         assert!(key_template.fallback.is_none());
         assert_eq!(key_template.algorithm.name, "xxhash64");
@@ -424,10 +486,10 @@ mod tests {
         let doc: KdlDocument = MISSING_KEY_PROFILE.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let result = parser.parse_node(&doc);
-        
+
         assert!(result.is_err());
         let err_msg = result.unwrap_err().help().unwrap().to_string();
-        
+
         assert!(err_msg.contains("Key profile must have 'key' directive"));
     }
 
@@ -445,8 +507,10 @@ mod tests {
     fn test_key_cannot_be_empty() {
         let doc: KdlDocument = EMPTY_KEY_PROFILE.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
-        let table = parser.parse_node(&doc).expect("Should parse even with empty key");
-        
+        let table = parser
+            .parse_node(&doc)
+            .expect("Should parse even with empty key");
+
         let key_template = table.get_key_templates().get("broken").unwrap();
         assert_eq!(key_template.source, "");
     }
@@ -467,7 +531,7 @@ mod tests {
         let doc: KdlDocument = KEY_WITH_FALLBACK.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let table = parser.parse_node(&doc).unwrap();
-        
+
         let key_template = table.get_key_templates().get("with-fallback").unwrap();
         assert_eq!(key_template.source, "${cookie_session}");
         assert_eq!(key_template.fallback.as_deref(), Some("${client_ip}"));
@@ -491,7 +555,7 @@ mod tests {
         let doc: KdlDocument = ALGORITHM_NAME_REQUIRED.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let result = parser.parse_node(&doc);
-        
+
         let table = result.expect("Should use default algorithm");
         let key_template = table.get_key_templates().get("bad-algo").unwrap();
         assert_eq!(key_template.algorithm.name, "xxhash64");
@@ -513,7 +577,7 @@ mod tests {
         let doc: KdlDocument = ALGORITHM_WITH_SEED_ONLY.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let table = parser.parse_node(&doc).unwrap();
-        
+
         let key_template = table.get_key_templates().get("seed-only").unwrap();
         assert_eq!(key_template.algorithm.name, "xxhash64");
         assert_eq!(key_template.algorithm.seed.as_deref(), Some("myseed"));
@@ -536,7 +600,7 @@ mod tests {
         let doc: KdlDocument = TRANSFORMS_ORDER_EMPTY.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let table = parser.parse_node(&doc).unwrap();
-        
+
         let key_template = table.get_key_templates().get("empty-transforms").unwrap();
         assert!(key_template.transforms.is_empty());
     }
@@ -561,18 +625,18 @@ mod tests {
         let doc: KdlDocument = TRANSFORMS_ORDER_WITH_STEPS.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let table = parser.parse_node(&doc).unwrap();
-        
+
         let key_template = table.get_key_templates().get("with-transforms").unwrap();
         let transforms = &key_template.transforms;
-        
+
         assert_eq!(transforms.len(), 3);
-        
+
         assert_eq!(transforms[0].name, "remove-query-params");
         assert!(transforms[0].params.is_empty());
-        
+
         assert_eq!(transforms[1].name, "lowercase");
         assert!(transforms[1].params.is_empty());
-        
+
         assert_eq!(transforms[2].name, "truncate");
         assert_eq!(transforms[2].params.get("length"), Some(&"256".to_string()));
         assert_eq!(transforms[2].params.len(), 1);
@@ -600,7 +664,7 @@ mod tests {
         let doc: KdlDocument = DUPLICATE_TEMPLATE_NAME.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let result = parser.parse_node(&doc);
-        
+
         assert!(result.is_err());
         let err_msg = result.unwrap_err().help().unwrap().to_string();
         assert!(err_msg.contains("Duplicate key template: 'duplicate'"));
@@ -629,13 +693,13 @@ mod tests {
         let doc: KdlDocument = NAMESPACED_TEMPLATES.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let table = parser.parse_node(&doc).unwrap();
-        
+
         assert!(table.get_key_templates().contains_key("motya.session"));
         assert!(table.get_key_templates().contains_key("motya.cdn.static"));
-        
+
         let key_template = table.get_key_templates().get("motya.session").unwrap();
         assert_eq!(key_template.source, "${cookie_session}");
-        
+
         let key_template = table.get_key_templates().get("motya.cdn.static").unwrap();
         assert_eq!(key_template.source, "${uri_path}");
     }
@@ -686,18 +750,30 @@ mod tests {
 
         assert_eq!(table.get_key_templates().len(), 3);
 
-        let key_template = table.get_key_templates().get("motya.session-sticky").unwrap();
+        let key_template = table
+            .get_key_templates()
+            .get("motya.session-sticky")
+            .unwrap();
         assert_eq!(key_template.source, "${cookie_session}");
-        assert_eq!(key_template.fallback.as_deref(), Some("${client_ip}:${user_agent}"));
+        assert_eq!(
+            key_template.fallback.as_deref(),
+            Some("${client_ip}:${user_agent}")
+        );
         assert_eq!(key_template.algorithm.name, "xxhash32");
         assert_eq!(key_template.algorithm.seed.as_deref(), Some("idk"));
         assert_eq!(key_template.transforms.len(), 3);
 
         assert_eq!(key_template.transforms[0].name, "remove-query-params");
         assert_eq!(key_template.transforms[2].name, "truncate");
-        assert_eq!(key_template.transforms[2].params.get("length"), Some(&"256".to_string()));
+        assert_eq!(
+            key_template.transforms[2].params.get("length"),
+            Some(&"256".to_string())
+        );
 
-        let key_template = table.get_key_templates().get("motya.cdn.static-files").unwrap();
+        let key_template = table
+            .get_key_templates()
+            .get("motya.cdn.static-files")
+            .unwrap();
         assert_eq!(key_template.source, "${uri_path}");
         assert_eq!(key_template.algorithm.name, "xxhash64");
         assert_eq!(key_template.transforms.len(), 2);
@@ -724,9 +800,14 @@ mod tests {
         let doc: KdlDocument = DUPLICATE_KEY_PROFILE.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let result = parser.parse_node(&doc);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().help().unwrap().to_string().contains("Duplicate key template: 'same'"));
+        assert!(result
+            .unwrap_err()
+            .help()
+            .unwrap()
+            .to_string()
+            .contains("Duplicate key template: 'same'"));
     }
 
     const PLUGINS_CONFIG: &str = r#"
@@ -753,11 +834,20 @@ mod tests {
 
         assert_eq!(table.get_plugins().len(), 2);
 
-        let local = table.get_plugins().get(&FQDN::from_str("local-wasm").unwrap()).unwrap();
+        let local = table
+            .get_plugins()
+            .get(&FQDN::from_str("local-wasm").unwrap())
+            .unwrap();
         assert_eq!(local.name, "local-wasm");
-        assert_eq!(local.source, PluginSource::File(PathBuf::from("./assets/filter.wasm")));
+        assert_eq!(
+            local.source,
+            PluginSource::File(PathBuf::from("./assets/filter.wasm"))
+        );
 
-        let remote = table.get_plugins().get(&FQDN::from_str("remote-wasm").unwrap()).unwrap();
+        let remote = table
+            .get_plugins()
+            .get(&FQDN::from_str("remote-wasm").unwrap())
+            .unwrap();
         assert_eq!(remote.name, "remote-wasm");
         if let PluginSource::Url(u) = &remote.source {
             assert_eq!(u, "https://example.com/filter.wasm");
@@ -781,9 +871,14 @@ mod tests {
         let doc: KdlDocument = INVALID_PLUGIN_NO_LOAD.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let res = parser.parse_node(&doc);
-        
+
         assert!(res.is_err());
-        assert!(res.unwrap_err().help().unwrap().to_string().contains("Plugin must have a 'load' directive"));
+        assert!(res
+            .unwrap_err()
+            .help()
+            .unwrap()
+            .to_string()
+            .contains("Plugin must have a 'load' directive"));
     }
 
     const INVALID_PLUGIN_BAD_LOAD: &str = r#"
@@ -802,9 +897,14 @@ mod tests {
         let doc: KdlDocument = INVALID_PLUGIN_BAD_LOAD.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let res = parser.parse_node(&doc);
-        
+
         assert!(res.is_err());
-        assert!(res.unwrap_err().help().unwrap().to_string().contains("Unknown configuration key: 'foo'"));
+        assert!(res
+            .unwrap_err()
+            .help()
+            .unwrap()
+            .to_string()
+            .contains("Unknown configuration key: 'foo'"));
     }
 
     const DUPLICATE_CHAIN_TEST: &str = r#"
@@ -829,9 +929,14 @@ mod tests {
         let doc: KdlDocument = DUPLICATE_CHAIN_TEST.parse().unwrap();
         let parser = DefinitionsSection::new(&doc);
         let result = parser.parse_node(&doc);
-        
+
         assert!(result.is_err());
-        assert!(result.unwrap_err().help().unwrap().to_string().contains("Duplicate chain-filters name: 'my-chain'"));
+        assert!(result
+            .unwrap_err()
+            .help()
+            .unwrap()
+            .to_string()
+            .contains("Duplicate chain-filters name: 'my-chain'"));
     }
 
     const NAMESPACE_MERGE_TEST: &str = r#"
@@ -861,10 +966,14 @@ mod tests {
         let parser = DefinitionsSection::new(&doc);
         let table = parser.parse_node(&doc).unwrap();
 
-        assert!(table.get_available_filters().contains(&FQDN::from_str("motya.inner.one").unwrap()));
-        assert!(table.get_available_filters().contains(&FQDN::from_str("motya.inner.two").unwrap()));
+        assert!(table
+            .get_available_filters()
+            .contains(&FQDN::from_str("motya.inner.one").unwrap()));
+        assert!(table
+            .get_available_filters()
+            .contains(&FQDN::from_str("motya.inner.two").unwrap()));
     }
-    
+
     const DUPLICATE_DEF_TEST: &str = r#"
     definitions {
         modifiers {
@@ -883,6 +992,11 @@ mod tests {
         let result = parser.parse_node(&doc);
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().help().unwrap().to_string().contains("Duplicate filter definition: 'motya.one'"));
+        assert!(result
+            .unwrap_err()
+            .help()
+            .unwrap()
+            .to_string()
+            .contains("Duplicate filter definition: 'motya.one'"));
     }
 }

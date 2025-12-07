@@ -2,8 +2,8 @@ use async_trait::async_trait;
 use pingora::Result;
 use pingora_http::{RequestHeader, ResponseHeader};
 use pingora_proxy::Session;
-use crate::proxy::MotyaContext;
 
+use crate::proxy::MotyaContext;
 
 
 /// This is a single-serving trait for modifiers that provide actions for
@@ -38,4 +38,3 @@ pub trait RequestFilterMod: Send + Sync {
     /// See [ProxyHttp::request_filter] for more details
     async fn request_filter(&self, session: &mut Session, ctx: &mut MotyaContext) -> Result<bool>;
 }
-

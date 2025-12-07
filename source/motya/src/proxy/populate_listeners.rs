@@ -2,8 +2,6 @@ use pingora::listeners::tls::TlsSettings;
 
 use motya_config::common_types::listeners::{ListenerKind, Listeners};
 
-
-
 pub fn populate_listners<T>(
     listeners: &Listeners,
     service: &mut pingora::services::listening::Service<T>,
@@ -33,7 +31,7 @@ pub fn populate_listners<T>(
                     settings.enable_h2();
                 }
 
-                service.add_tls_with_settings(&addr, None, settings);
+                service.add_tls_with_settings(addr, None, settings);
             }
             ListenerKind::Tcp {
                 addr,
@@ -43,7 +41,7 @@ pub fn populate_listners<T>(
                 if *offer_h2 {
                     panic!("Unsupported configuration: {addr:?} configured without TLS, but H2 enabled which requires TLS");
                 }
-                service.add_tcp(&addr);
+                service.add_tcp(addr);
             }
             ListenerKind::Uds(path) => {
                 let path = path.to_str().unwrap();

@@ -3,8 +3,6 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-
-
 #[derive(Parser, Debug)]
 pub struct Cli {
     /// Validate all configuration data and exit
@@ -43,10 +41,8 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
-
 #[derive(Subcommand, Debug, Clone)]
 pub enum Commands {
-    
     Hello {
         #[arg(short, long, default_value_t = 8080)]
         port: u16,
@@ -59,12 +55,12 @@ pub enum Commands {
         port: u16,
 
         /// Route mappings in "path=target" format.
-        /// If the target starts with "http", it acts as a proxy. 
+        /// If the target starts with "http", it acts as a proxy.
         /// Otherwise, it is treated as a static text response.
         /// Example: --map "/api=http://127.0.0.1:9000" --map "/=Welcome!"
         #[arg(short, long)]
         map: Vec<String>,
-    }
+    },
 }
 
 pub const BANNER: &str = r#"

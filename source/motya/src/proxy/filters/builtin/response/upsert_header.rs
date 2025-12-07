@@ -1,23 +1,22 @@
-// Upsert Header
-//
-//
-
 use std::collections::BTreeMap;
 
 use pingora::Result;
 use pingora_http::ResponseHeader;
 use pingora_proxy::Session;
 
-use crate::proxy::{MotyaContext, filters::{builtin::helpers::extract_val, types::ResponseModifyMod}};
+use crate::proxy::{
+    filters::{builtin::helpers::extract_val, types::ResponseModifyMod},
+    MotyaContext,
+};
 
-/// Adds or replaces a given header key and value
+
 pub struct UpsertHeader {
     key: String,
     value: String,
 }
 
 impl UpsertHeader {
-    /// Create from the settings field
+    
     pub fn from_settings(mut settings: BTreeMap<String, String>) -> Result<Self> {
         let key = extract_val("key", &mut settings)?;
         let value = extract_val("value", &mut settings)?;

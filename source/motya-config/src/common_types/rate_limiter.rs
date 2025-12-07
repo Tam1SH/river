@@ -1,7 +1,9 @@
 use std::num::NonZeroUsize;
 
-use crate::legacy::{multi::MultiRequestKeyKind, single::{SingleInstanceConfig, SingleRequestKeyKind}};
-
+use crate::legacy::{
+    multi::MultiRequestKeyKind,
+    single::{SingleInstanceConfig, SingleRequestKeyKind},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MultiRaterInstanceConfig {
@@ -29,7 +31,6 @@ pub struct MultiRaterConfig {
     /// The number of tokens added to the bucket every `refill_interval_millis`
     pub refill_qty: NonZeroUsize,
 }
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum AllRateConfig {

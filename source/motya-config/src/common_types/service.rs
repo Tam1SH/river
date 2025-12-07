@@ -1,9 +1,12 @@
-use crate::{common_types::{connectors::Connectors, listeners::Listeners, rate_limiter::RateLimitingConfig, section_parser::SectionParser}, internal::ProxyConfig};
+use crate::{
+    common_types::{connectors::Connectors, listeners::Listeners, section_parser::SectionParser},
+    internal::ProxyConfig,
+};
 
 pub struct ServiceSection<'a, T> {
     listeners: &'a dyn SectionParser<T, Listeners>,
     connectors: &'a dyn SectionParser<T, Connectors>,
-    name: &'a str
+    name: &'a str,
 }
 
 pub trait ServiceSectionParser<T> {
@@ -14,23 +17,25 @@ impl<'a, T> ServiceSection<'a, T> {
     pub fn new(
         listeners: &'a dyn SectionParser<T, Listeners>,
         connectors: &'a dyn SectionParser<T, Connectors>,
-        name: &'a str
+        name: &'a str,
     ) -> Self {
-        Self { listeners, connectors, name }
+        Self {
+            listeners,
+            connectors,
+            name,
+        }
     }
 }
 
 impl<T> ServiceSectionParser<T> for ServiceSection<'_, T> {
-
     fn parse_node(&self, node: &T) -> miette::Result<ProxyConfig> {
-        
         let listeners = self.listeners.parse_node(node)?;
         let connectors = self.connectors.parse_node(node)?;
 
         Ok(ProxyConfig {
             name: self.name.to_string(),
             listeners,
-            connectors
+            connectors,
         })
     }
 }

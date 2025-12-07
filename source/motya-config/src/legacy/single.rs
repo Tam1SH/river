@@ -1,9 +1,8 @@
-use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 use leaky_bucket::RateLimiter;
 use pingora_proxy::Session;
+use std::{num::NonZeroUsize, sync::Arc, time::Duration};
 
 use crate::legacy::something::{RegexShim, Ticket};
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SingleInstanceConfig {
@@ -68,28 +67,31 @@ impl SingleInstance {
     }
 }
 
-
 #[cfg(test)]
 mod test {
 
-    use std::num::NonZeroUsize;
-    use std::io::Cursor;
     use pingora_proxy::Session;
+    use std::io::Cursor;
+    use std::num::NonZeroUsize;
 
-    use crate::legacy::{something::RegexShim, single::{SingleInstance, SingleInstanceConfig, SingleRequestKeyKind}};
+    use crate::legacy::{
+        single::{SingleInstance, SingleInstanceConfig, SingleRequestKeyKind},
+        something::RegexShim,
+    };
 
     #[tokio::test]
     async fn single_instance_get_ticket() {
         let instance = SingleInstance::new(
-            SingleInstanceConfig { 
-                max_tokens_per_bucket: NonZeroUsize::new(1).unwrap(), 
-                refill_interval_millis: NonZeroUsize::new(1).unwrap(), 
-                refill_qty: NonZeroUsize::new(1).unwrap() 
+            SingleInstanceConfig {
+                max_tokens_per_bucket: NonZeroUsize::new(1).unwrap(),
+                refill_interval_millis: NonZeroUsize::new(1).unwrap(),
+                refill_qty: NonZeroUsize::new(1).unwrap(),
             },
             SingleRequestKeyKind::UriGroup {
-                pattern: RegexShim::new("static/.*").unwrap()
-            });
-        {    
+                pattern: RegexShim::new("static/.*").unwrap(),
+            },
+        );
+        {
             // Create an in-memory buffer simulating raw HTTP request bytes
             let buf = Cursor::new(b"GET /static/42.ext HTTP/1.1\r\n\r\n".to_vec());
             let mut session = Session::new_h1(Box::new(buf));
@@ -106,7 +108,6 @@ mod test {
 
             let ticket = instance.get_ticket(&session);
             assert!(ticket.is_none());
-        }        
+        }
     }
-
 }

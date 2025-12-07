@@ -1,12 +1,13 @@
-use std::{collections::HashMap, str::FromStr};
-use fqdn::FQDN;
-use kdl::KdlDocument;
 use crate::{
     common_types::{
-        bad::Bad, definitions::{ConfiguredFilter, FilterChain},
+        bad::Bad,
+        definitions::{ConfiguredFilter, FilterChain},
     },
     kdl::utils,
 };
+use fqdn::FQDN;
+use kdl::KdlDocument;
+use std::{collections::HashMap, str::FromStr};
 
 pub struct ChainParser;
 
@@ -21,29 +22,21 @@ impl ChainParser {
                     format!("Expected 'filter' directive, found '{name}'"),
                     doc,
                     &node.span(),
-                ).into());
-            } 
+                )
+                .into());
+            }
 
             let mut args_map: HashMap<String, String> = utils::str_str_args(doc, args)?
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect();
 
-            let filter_name = FQDN::from_str(&args_map.remove("name")
-                .ok_or_else(|| {
-                    Bad::docspan(
-                        "filter requires a 'name' argument",
-                        doc,
-                        &node.span(),
-                    )
-                })?)
-                .map_err(|err| {
-                    Bad::docspan(
-                        format!("name is not FQDN, err: '{err}'"),
-                        doc,
-                        &node.span(),
-                    )
-                })?;
+            let filter_name = FQDN::from_str(&args_map.remove("name").ok_or_else(|| {
+                Bad::docspan("filter requires a 'name' argument", doc, &node.span())
+            })?)
+            .map_err(|err| {
+                Bad::docspan(format!("name is not FQDN, err: '{err}'"), doc, &node.span())
+            })?;
 
             filters.push(ConfiguredFilter {
                 name: filter_name,
@@ -62,7 +55,6 @@ mod tests {
 
     #[test]
     fn test_chain_parser_success_happy_path() {
-        
         let kdl_input = r#"
             filter name="com.example.auth"
             filter name="com.example.logger" level="debug" format="json"
@@ -85,7 +77,6 @@ mod tests {
 
     #[test]
     fn test_chain_parser_empty_block() {
-        
         let kdl_input = "";
         let doc: KdlDocument = kdl_input.parse().unwrap();
 
@@ -94,7 +85,7 @@ mod tests {
     }
 
     #[test]
-    fn test_chain_parser_invalid_directive_name() { 
+    fn test_chain_parser_invalid_directive_name() {
         let kdl_input = r#"
             filter name="good.filter"
             not-filter name="bad.one"
@@ -109,7 +100,6 @@ mod tests {
 
     #[test]
     fn test_chain_parser_missing_name_argument() {
-        
         let kdl_input = r#"
             filter arg="value"
         "#;
@@ -122,7 +112,6 @@ mod tests {
 
     #[test]
     fn test_chain_parser_invalid_fqdn() {
-        
         let kdl_input = r#"
             filter name="invalid name with spaces"
         "#;

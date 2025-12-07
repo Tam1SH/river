@@ -3,14 +3,15 @@
 use std::ops::{Deref, DerefMut};
 
 use async_trait::async_trait;
+use motya_config::common_types::file_server::FileServerConfig;
 use pandora_module_utils::{pingora::SessionWrapper, RequestFilter, RequestFilterResult};
 use pingora::{server::Server, upstreams::peer::HttpPeer, Result};
 use pingora_proxy::{ProxyHttp, Session};
 use static_files_module::{StaticFilesConf, StaticFilesHandler};
-use motya_config::common_types::file_server::FileServerConfig;
+
 use crate::proxy::populate_listeners::populate_listners;
 
-/// Create a new file serving service
+
 pub fn motya_file_server(
     conf: FileServerConfig,
     server: &Server,

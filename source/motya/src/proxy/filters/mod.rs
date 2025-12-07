@@ -1,5 +1,5 @@
-pub mod registry;
-pub mod generate_registry;
-pub mod chain_resolver;
-pub mod types;
 pub mod builtin;
+pub mod chain_resolver;
+pub mod generate_registry;
+pub mod registry;
+pub mod types;

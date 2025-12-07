@@ -6,20 +6,21 @@ use pingora_http::RequestHeader;
 use pingora_proxy::Session;
 use regex::Regex;
 
-use crate::proxy::{MotyaContext, filters::{builtin::helpers::{ensure_empty, extract_val}, types::RequestModifyMod}};
+use crate::proxy::{
+    filters::{
+        builtin::helpers::{ensure_empty, extract_val},
+        types::RequestModifyMod,
+    },
+    MotyaContext,
+};
 
 
-// Remove header by key
-//
-//
-
-/// Removes a header if the key matches a given regex
 pub struct RemoveHeaderKeyRegex {
     regex: Regex,
 }
 
 impl RemoveHeaderKeyRegex {
-    /// Create from the settings field
+    
     pub fn from_settings(mut settings: BTreeMap<String, String>) -> Result<Self> {
         let mat = extract_val("pattern", &mut settings)?;
 

@@ -1,26 +1,25 @@
-use motya_config::define_builtin_filters;
-use motya_config::common_types::definitions_table::DefinitionsTable;
-use crate::proxy::filters::registry::FilterRegistry;
-use crate::proxy::filters::registry::RegistryFilterContainer;
+use crate::proxy::filters::registry::{FilterInstance, FilterRegistry, RegistryFilterContainer};
 use crate::proxy::filters::builtin::{
-    cidr_range::CidrRangeFilter, 
+    cidr_range::CidrRangeFilter,
     request::{
-        remove_headers::RemoveHeaderKeyRegex as RequestRemoveHeaderKeyRegex, 
-        upsert_headers::UpsertHeader as RequestUpsertHeader,
+        remove_headers::RemoveHeaderKeyRegex as RequestRemoveHeaderKeyRegex,
+        rewrite_path::RewritePathRegex,
         strip_prefix::StripPrefix,
-        rewrite_path::RewritePathRegex
-    }, 
+        upsert_headers::UpsertHeader as RequestUpsertHeader,
+    },
     response::{
-        remove_header::RemoveHeaderKeyRegex as ResponseRemoveHeaderKeyRegex, 
-        upsert_header::UpsertHeader as ResponseUpsertHeader
-    }
+        remove_header::RemoveHeaderKeyRegex as ResponseRemoveHeaderKeyRegex,
+        upsert_header::UpsertHeader as ResponseUpsertHeader,
+    },
 };
-use crate::proxy::filters::registry::FilterInstance;
+use motya_config::common_types::definitions_table::DefinitionsTable;
+use motya_config::define_builtin_filters;
+
 
 macro_rules! impl_registry_loader {
     (
         actions: { $($act_key:literal => $act_type:ty),* $(,)? }
-        
+
         requests: { $($req_key:literal => $req_type:ty),* $(,)? }
 
         responses: { $($res_key:literal => $res_type:ty),* $(,)? }
@@ -30,19 +29,19 @@ macro_rules! impl_registry_loader {
 
             $(
                 let key = fqdn::fqdn!($act_key);
-                definitions.insert_filter(key.clone()); 
-                
+                definitions.insert_filter(key.clone());
+
                 registry.register_factory(key, Box::new(|settings| {
                     let item = <$act_type>::from_settings(settings)?;
                     Ok(RegistryFilterContainer::Builtin(FilterInstance::Action(Box::new(item))))
                 }));
             )*
 
-            
+
             $(
                 let key = fqdn::fqdn!($req_key);
                 definitions.insert_filter(key.clone());
-                
+
                 registry.register_factory(key, Box::new(|settings| {
                     let item = <$req_type>::from_settings(settings)?;
                     Ok(RegistryFilterContainer::Builtin(FilterInstance::Request(Box::new(item))))
@@ -52,7 +51,7 @@ macro_rules! impl_registry_loader {
             $(
                 let key = fqdn::fqdn!($res_key);
                 definitions.insert_filter(key.clone());
-                
+
                 registry.register_factory(key, Box::new(|settings| {
                     let item = <$res_type>::from_settings(settings)?;
                     Ok(RegistryFilterContainer::Builtin(FilterInstance::Response(Box::new(item))))

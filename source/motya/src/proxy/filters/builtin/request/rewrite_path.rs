@@ -2,14 +2,19 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
+use http::uri::{PathAndQuery, Uri};
 use pingora::{Error, Result};
 use pingora_http::RequestHeader;
 use pingora_proxy::Session;
 use regex::Regex;
-use http::uri::{Uri, Parts, PathAndQuery};
 
-use crate::proxy::{MotyaContext, filters::{builtin::helpers::{ensure_empty, extract_val}, types::RequestModifyMod}};
-
+use crate::proxy::{
+    filters::{
+        builtin::helpers::{ensure_empty, extract_val},
+        types::RequestModifyMod,
+    },
+    MotyaContext,
+};
 
 /// Filter: Rewrite Path Regex
 /// Replaces path based on regex pattern. Supports capture groups ($1, $2).
@@ -48,10 +53,8 @@ impl RequestModifyMod for RewritePathRegex {
                 tracing::debug!("RewritePath: {} -> {}", header.uri.path(), new_uri.path());
                 header.set_uri(new_uri);
                 Ok(())
-            },
-            Ok(None) => {
-                Ok(())
-            },
+            }
+            Ok(None) => Ok(()),
             Err(e) => {
                 tracing::error!("RewritePath failed: {}", e);
                 Err(Error::new_str("Failed to rewrite path and build new URI"))
@@ -68,12 +71,10 @@ fn rewrite_uri_path_regex(
     let current_path = original_uri.path();
 
     if regex.is_match(current_path) {
-        
         let new_path_cow = regex.replace(current_path, replace);
         let new_path = new_path_cow.as_ref();
 
         if new_path != current_path {
-            
             let query = original_uri.query();
             let new_p_and_q_str = match query {
                 Some(q) => format!("{}?{}", new_path, q),
@@ -86,9 +87,9 @@ fn rewrite_uri_path_regex(
             let mut parts = original_uri.clone().into_parts();
             parts.path_and_query = Some(new_p_and_q);
 
-            let new_uri = Uri::from_parts(parts)
-                .map_err(|e| format!("Failed to reassemble URI: {}", e))?;
-            
+            let new_uri =
+                Uri::from_parts(parts).map_err(|e| format!("Failed to reassemble URI: {}", e))?;
+
             Ok(Some(new_uri))
         } else {
             Ok(None)
@@ -97,7 +98,6 @@ fn rewrite_uri_path_regex(
         Ok(None)
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -114,12 +114,12 @@ mod tests {
         let original_uri = create_uri("/api/v1/users/123/posts");
         let regex = Regex::new("^/api/v1/(.*)/posts$").unwrap();
         let replace = "/new_api/$1/data";
-        
+
         let result = rewrite_uri_path_regex(&original_uri, &regex, replace)?;
-        
+
         assert!(result.is_some());
         let new_uri = result.unwrap();
-        
+
         assert_eq!(new_uri.path(), "/new_api/users/123/data");
         assert_eq!(new_uri.to_string(), "/new_api/users/123/data");
 
@@ -131,12 +131,12 @@ mod tests {
         let original_uri = create_uri("/old/path?a=1&b=2");
         let regex = Regex::new("^/old/path$").unwrap();
         let replace = "/new/path";
-        
+
         let result = rewrite_uri_path_regex(&original_uri, &regex, replace)?;
-        
+
         assert!(result.is_some());
         let new_uri = result.unwrap();
-        
+
         assert_eq!(new_uri.path(), "/new/path");
         assert_eq!(new_uri.query(), Some("a=1&b=2"));
         assert_eq!(new_uri.to_string(), "/new/path?a=1&b=2");
@@ -149,9 +149,9 @@ mod tests {
         let original_uri = create_uri("/prod/v1/data");
         let regex = Regex::new("^/staging/v1/(.*)$").unwrap();
         let replace = "/new/$1";
-        
+
         let result = rewrite_uri_path_regex(&original_uri, &regex, replace)?;
-        
+
         assert!(result.is_none());
 
         Ok(())
@@ -161,10 +161,10 @@ mod tests {
     fn test_rewrite_match_but_no_change() -> RewriteResult<()> {
         let original_uri = create_uri("/path/to/data");
         let regex = Regex::new("^/path/to/data$").unwrap();
-        let replace = "/path/to/data"; 
-        
+        let replace = "/path/to/data";
+
         let result = rewrite_uri_path_regex(&original_uri, &regex, replace)?;
-        
+
         assert!(result.is_none());
 
         Ok(())
@@ -175,12 +175,12 @@ mod tests {
         let original_uri = create_uri("/some/deep/path");
         let regex = Regex::new("^/some/.*$").unwrap();
         let replace = "/";
-        
+
         let result = rewrite_uri_path_regex(&original_uri, &regex, replace)?;
-        
+
         assert!(result.is_some());
         let new_uri = result.unwrap();
-        
+
         assert_eq!(new_uri.path(), "/");
         assert_eq!(new_uri.to_string(), "/");
 
